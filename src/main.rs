@@ -54,6 +54,22 @@ impl<'a> Tensor<'a> {
     pub fn size(&self) -> usize {
         self.shape.iter().fold(1, |curr, s| curr * s)
     }
+    pub fn reshape(&self, shape: &[usize]) -> Tensor {
+        let new_size = shape.iter().fold(1, |c, s| c * s);
+        assert_eq!(new_size, self.size());
+        Tensor {
+            blob: Data::View(self.blob.as_ref()),
+            shape: shape.to_vec(),
+        }
+    }
+    pub fn reshape_mut(&mut self, shape: &[usize]) -> Tensor {
+        let new_size = shape.iter().fold(1, |c, s| c * s);
+        assert_eq!(new_size, self.size());
+        Tensor {
+            blob: Data::MutView(self.blob.as_mut()),
+            shape: shape.to_vec(),
+        }
+    }
     pub fn get_mut(&mut self, ind: usize) -> Tensor {
         let dim = self.shape.get(0).expect("Cannot index into a scalar!");
         let sub_size = self.size() / dim;
@@ -87,4 +103,9 @@ fn main() {
     t.get_mut(1).fill(2.0);
     println!("{:?} {:?}", t.get(0), t.get(1));
     println!("{:?} {:?}", t.get(0).get(1), t.get(1).get(2));
+    let mut t2 = t.reshape_mut(&[3, 2]);
+    println!("{:?} {:?} {:?}", t2.get(0), t2.get(1), t2.get(2));
+    t2.get_mut(2).fill(4.0);
+    println!("{:?} {:?} {:?}", t2.get(0), t2.get(1), t2.get(2));
+    println!("{:?} {:?}", t.get(0), t.get(1));
 }
