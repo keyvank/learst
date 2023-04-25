@@ -54,23 +54,30 @@ impl<'a, T: TensorOps> Iterator for TensorIter<'a, T> {
     }
 }
 
-/*pub struct TensorIterMut<'a, T: TensorOps> {
+pub struct TensorIterMut<'a, T: TensorMutOps> {
     target: &'a mut T,
     index: usize,
 }
-impl<'a, T: TensorOps> Iterator for TensorIterMut<'a, T> {
+impl<'a, T: TensorMutOps> Iterator for TensorIterMut<'a, T> {
     type Item = TensorMutView<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let ret = if self.index < self.target.len() {
-            Some(self.target.get_mut(self.index))
+            unsafe {
+                let t = self.target.get_mut(self.index);
+                Some(TensorMutView {
+                    mirror: &mut *(t.mirror as *mut Tensor),
+                    offset: t.offset,
+                    shape: t.shape,
+                })
+            }
         } else {
             None
         };
         self.index += 1;
         ret
     }
-}*/
+}
 
 pub trait TensorMutOps: TensorOps {
     fn blob_mut(&mut self) -> &mut [f32];
@@ -98,6 +105,12 @@ pub trait TensorMutOps: TensorOps {
             shape,
         }
     }
+    fn iter_mut<'a>(&'a mut self) -> TensorIterMut<'a, Self> {
+        TensorIterMut {
+            target: self,
+            index: 0,
+        }
+    }
 }
 
 pub trait TensorOps: Sized {
@@ -112,12 +125,6 @@ pub trait TensorOps: Sized {
             index: 0,
         }
     }
-    /*fn iter_mut<'a>(&'a mut self) -> TensorIter<'a, Self> {
-        TensorIter {
-            target: self,
-            index: 0,
-        }
-    }*/
     fn dim(&self) -> usize {
         self.shape().len()
     }
@@ -266,9 +273,8 @@ impl Module for Linear {
 
 fn main() {
     let mut t = Tensor::zeros(&[3, 4, 5]);
-    t.get_mut(0).fill(1.);
-    t.get_mut(1).fill(2.);
-    t.get_mut(1).get_mut(2).fill(10.);
-    t.get_mut(2).fill(3.);
-    println!("{:?}", Tensor::from(t.get(1)));
+    for (i, mut t) in t.iter_mut().enumerate() {
+        t.fill(i as f32);
+    }
+    println!("{:?}", t);
 }
