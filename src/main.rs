@@ -145,7 +145,6 @@ fn reshape(size: usize, shape: &[usize]) -> Vec<usize> {
 pub trait TensorOps: Sized {
     fn shape(&self) -> &[usize];
     fn blob(&self) -> &[f32];
-
     fn tensor(&self) -> &Tensor;
     fn offset(&self) -> usize;
 
@@ -331,8 +330,36 @@ impl Tensor {
     }
 }
 
+use std::ops::*;
+
+impl Add for &Tensor {
+    type Output = Tensor;
+
+    fn add(self, other: &Tensor) -> Self::Output {
+        let mut output = self.clone();
+        let mut shape = other.shape().to_vec();
+        shape.insert(0, 0);
+        for mut t in output.reshape_mut(&shape).iter_mut() {
+            assert_eq!(t.shape(), other.shape());
+            t.blob_mut()
+                .iter_mut()
+                .zip(other.blob.iter())
+                .for_each(|(t, a)| *t += a);
+        }
+        output
+    }
+}
+
 trait Module {
     fn forward(&mut self, inp: &Tensor) -> Tensor;
+}
+
+pub struct ReLU;
+
+impl Module for ReLU {
+    fn forward(&mut self, inp: &Tensor) -> Tensor {
+        inp.clone()
+    }
 }
 
 pub struct Linear {
@@ -342,12 +369,12 @@ pub struct Linear {
 
 impl Module for Linear {
     fn forward(&mut self, inp: &Tensor) -> Tensor {
-        Tensor::matmul(inp, &self.weights)
+        &Tensor::matmul(inp, &self.weights) + &self.bias
     }
 }
 
 fn main() {
-    let mut rng = thread_rng();
-    let t = Tensor::rand(&mut rng, &[6, 7, 4, 5]);
-    Tensor::matmul(&t, &Tensor::iden(5));
+    let t1 = Tensor::zeros(&[6, 7, 5, 5]);
+    let t2 = Tensor::iden(5);
+    println!("{:?}", (&t1 + &t2));
 }
