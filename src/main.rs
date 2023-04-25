@@ -20,8 +20,8 @@ pub struct TensorMutView<'a> {
     shape: Vec<usize>,
 }
 
-impl<'a> From<TensorView<'a>> for Tensor {
-    fn from(view: TensorView<'a>) -> Self {
+impl<'a> From<&TensorView<'a>> for Tensor {
+    fn from(view: &TensorView<'a>) -> Self {
         Self {
             blob: view.blob().to_vec(),
             shape: view.shape().to_vec(),
@@ -29,8 +29,8 @@ impl<'a> From<TensorView<'a>> for Tensor {
     }
 }
 
-impl<'a> From<TensorMutView<'a>> for Tensor {
-    fn from(view: TensorMutView<'a>) -> Self {
+impl<'a> From<&TensorMutView<'a>> for Tensor {
+    fn from(view: &TensorMutView<'a>) -> Self {
         Self {
             blob: view.blob().to_vec(),
             shape: view.shape().to_vec(),
@@ -147,6 +147,12 @@ pub trait TensorOps: Sized {
     fn blob(&self) -> &[f32];
     fn tensor(&self) -> &Tensor;
     fn offset(&self) -> usize;
+    fn map<F: Fn(f32) -> f32>(&self, f: F) -> Tensor {
+        Tensor {
+            blob: self.blob().iter().map(|v| f(*v)).collect(),
+            shape: self.shape().to_vec(),
+        }
+    }
 
     fn scalar(&self) -> f32 {
         if self.dim() == 0 {
@@ -301,7 +307,7 @@ impl Tensor {
     }
     pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Self {
         let blob: Vec<f32> = (0..shape.iter().fold(1, |curr, s| curr * s))
-            .map(|_| r.gen())
+            .map(|_| r.gen::<f32>() * 2. - 1.)
             .collect();
         Self {
             blob,
@@ -355,9 +361,7 @@ impl Mul<f32> for &Tensor {
 
     fn mul(self, other: f32) -> Self::Output {
         let mut output = self.clone();
-            output.blob_mut()
-                .iter_mut()
-                .for_each(|t| *t *= other);
+        output.blob_mut().iter_mut().for_each(|t| *t *= other);
         output
     }
 }
@@ -370,7 +374,7 @@ pub struct ReLU;
 
 impl Module for ReLU {
     fn forward(&mut self, inp: &Tensor) -> Tensor {
-        inp.clone()
+        inp.map(|f| if f < 0.0 { 0.0 } else { f })
     }
 }
 
@@ -386,7 +390,10 @@ impl Module for Linear {
 }
 
 fn main() {
-    let t1 = Tensor::zeros(&[6, 7, 5, 5]);
-    let t2 = Tensor::iden(5);
-    println!("{:?}", &(&t1 + &t2) * 5.);
+    let mut rng = thread_rng();
+    let t1 = Tensor::rand(&mut rng, &[6, 7, 5, 5]);
+    let mut relu = ReLU {};
+    let out = relu.forward(&t1);
+    println!("{:?}", out);
+    //println!("{:?}", &(&t1 + &t2) * 5.);
 }
