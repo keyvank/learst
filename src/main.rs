@@ -3,6 +3,7 @@ use rand::prelude::*;
 #[derive(Debug, Clone)]
 pub struct Tensor {
     blob: Vec<f32>,
+    grad: Option<Vec<f32>>,
     shape: Vec<usize>,
 }
 
@@ -25,6 +26,7 @@ impl<'a> From<&TensorView<'a>> for Tensor {
         Self {
             blob: view.blob().to_vec(),
             shape: view.shape().to_vec(),
+            grad: None,
         }
     }
 }
@@ -34,6 +36,7 @@ impl<'a> From<&TensorMutView<'a>> for Tensor {
         Self {
             blob: view.blob().to_vec(),
             shape: view.shape().to_vec(),
+            grad: None,
         }
     }
 }
@@ -147,10 +150,14 @@ pub trait TensorOps: Sized {
     fn blob(&self) -> &[f32];
     fn tensor(&self) -> &Tensor;
     fn offset(&self) -> usize;
+    fn sum(&self) -> f32 {
+        self.blob().iter().sum()
+    }
     fn map<F: Fn(f32) -> f32>(&self, f: F) -> Tensor {
         Tensor {
             blob: self.blob().iter().map(|v| f(*v)).collect(),
             shape: self.shape().to_vec(),
+            grad: None,
         }
     }
 
@@ -312,12 +319,14 @@ impl Tensor {
         Self {
             blob,
             shape: shape.to_vec(),
+            grad: None,
         }
     }
     pub fn zeros(shape: &[usize]) -> Self {
         Self {
             blob: vec![0.; shape.iter().fold(1, |curr, s| curr * s)],
             shape: shape.to_vec(),
+            grad: None,
         }
     }
     pub fn iden(n: usize) -> Self {
@@ -326,12 +335,14 @@ impl Tensor {
                 .map(|i| if i / n == i % n { 1. } else { 0. })
                 .collect(),
             shape: vec![n, n],
+            grad: None,
         }
     }
     pub fn scalar(v: f32) -> Self {
         Self {
             blob: vec![v],
             shape: vec![],
+            grad: None,
         }
     }
 }
@@ -355,6 +366,31 @@ impl Add for &Tensor {
         output
     }
 }
+impl Sub for &Tensor {
+    type Output = Tensor;
+
+    fn sub(self, other: &Tensor) -> Self::Output {
+        self + &(other * -1.)
+    }
+}
+
+impl Mul for &Tensor {
+    type Output = Tensor;
+
+    fn mul(self, other: &Tensor) -> Self::Output {
+        let mut output = self.clone();
+        let mut shape = other.shape().to_vec();
+        shape.insert(0, 0);
+        for mut t in output.reshape_mut(&shape).iter_mut() {
+            assert_eq!(t.shape(), other.shape());
+            t.blob_mut()
+                .iter_mut()
+                .zip(other.blob.iter())
+                .for_each(|(t, a)| *t *= a);
+        }
+        output
+    }
+}
 
 impl Mul<f32> for &Tensor {
     type Output = Tensor;
@@ -368,6 +404,10 @@ impl Mul<f32> for &Tensor {
 
 trait Module {
     fn forward(&mut self, inp: &Tensor) -> Tensor;
+}
+
+trait Loss {
+    fn loss(&mut self, inp: &Tensor, target: &Tensor) -> Tensor;
 }
 
 pub struct ReLU;
@@ -389,11 +429,22 @@ impl Module for Linear {
     }
 }
 
+pub struct L2Loss;
+
+impl Loss for L2Loss {
+    fn loss(&mut self, inp: &Tensor, target: &Tensor) -> Tensor {
+        let diff = (inp - target);
+        &diff * &diff
+    }
+}
+
 fn main() {
     let mut rng = thread_rng();
-    let t1 = Tensor::rand(&mut rng, &[6, 7, 5, 5]);
-    let mut relu = ReLU {};
-    let out = relu.forward(&t1);
-    println!("{:?}", out);
+    let t1 = Tensor::rand(&mut rng, &[5, 5]);
+    let t2 = Tensor::rand(&mut rng, &[5, 5]);
+    let mut loss = L2Loss {};
+    println!("{}", loss.loss(&t1, &t1).sum());
+    println!("{}", loss.loss(&t2, &t2).sum());
+    println!("{}", loss.loss(&t1, &t2).sum());
     //println!("{:?}", &(&t1 + &t2) * 5.);
 }
