@@ -160,13 +160,23 @@ pub trait TensorOps: Sized {
         self.shape().iter().fold(1, |curr, s| curr * s)
     }
     fn reshape(&self, shape: &[usize]) -> TensorView {
-        let new_size = shape.iter().fold(1, |c, s| c * s);
+        let mut final_shape = shape.to_vec();
+        if shape[0] == 0 && shape[1..].iter().all(|s| *s != 0) {
+            let mul = shape[1..].iter().fold(1, |c, s| c * s);
+            final_shape[0] = self.size() / mul;
+        } else if shape[shape.len() - 1] == 0 && shape[0..shape.len() - 1].iter().all(|s| *s != 0) {
+            let mul = shape[..shape.len() - 1].iter().fold(1, |c, s| c * s);
+            final_shape[shape.len() - 1] = self.size() / mul;
+        } else {
+            assert!(shape.iter().all(|s| *s != 0));
+        };
+        let new_size = final_shape.iter().fold(1, |c, s| c * s);
         assert_eq!(new_size, self.size());
         let offset = self.offset();
         TensorView {
             mirror: self.tensor(),
             offset: offset,
-            shape: shape.to_vec(),
+            shape: final_shape,
         }
     }
 
@@ -340,11 +350,6 @@ fn main() {
     let mut rng = thread_rng();
     let t = Tensor::rand(&mut rng, &[6, 7, 4, 5]);
 
-    let mut lin = Linear {
-        weights: Tensor::iden(5),
-        bias: Tensor::zeros(&[5]),
-    };
-
-    let res = lin.forward(&t);
-    println!("{:?}\n{:?}", t, res);
+    println!("{:?}", t.reshape(&[6, 7, 0]).shape());
+    println!("{:?}", t.reshape(&[0, 4, 5]).shape());
 }
