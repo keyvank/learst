@@ -350,6 +350,18 @@ impl Add for &Tensor {
     }
 }
 
+impl Mul<f32> for &Tensor {
+    type Output = Tensor;
+
+    fn mul(self, other: f32) -> Self::Output {
+        let mut output = self.clone();
+            output.blob_mut()
+                .iter_mut()
+                .for_each(|t| *t *= other);
+        output
+    }
+}
+
 trait Module {
     fn forward(&mut self, inp: &Tensor) -> Tensor;
 }
@@ -376,5 +388,5 @@ impl Module for Linear {
 fn main() {
     let t1 = Tensor::zeros(&[6, 7, 5, 5]);
     let t2 = Tensor::iden(5);
-    println!("{:?}", (&t1 + &t2));
+    println!("{:?}", &(&t1 + &t2) * 5.);
 }
