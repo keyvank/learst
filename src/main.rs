@@ -1,9 +1,9 @@
 use rand::prelude::*;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Tensor {
     blob: Vec<f32>,
-    grad: Option<Vec<f32>>,
     shape: Vec<usize>,
 }
 
@@ -26,7 +26,6 @@ impl<'a> From<&TensorView<'a>> for Tensor {
         Self {
             blob: view.blob().to_vec(),
             shape: view.shape().to_vec(),
-            grad: None,
         }
     }
 }
@@ -36,7 +35,6 @@ impl<'a> From<&TensorMutView<'a>> for Tensor {
         Self {
             blob: view.blob().to_vec(),
             shape: view.shape().to_vec(),
-            grad: None,
         }
     }
 }
@@ -157,7 +155,6 @@ pub trait TensorOps: Sized {
         Tensor {
             blob: self.blob().iter().map(|v| f(*v)).collect(),
             shape: self.shape().to_vec(),
-            grad: None,
         }
     }
 
@@ -277,7 +274,7 @@ impl TensorOps for TensorView<'_> {
 }
 
 impl Tensor {
-    pub fn matmul<A: TensorOps, B: TensorOps>(a: &A, b: &B) -> Tensor {
+    pub fn matmul<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
         assert!(a.dim() >= 2);
         assert_eq!(b.dim(), 2);
         assert_eq!(a.shape()[a.dim() - 1], b.shape()[0]);
@@ -319,14 +316,12 @@ impl Tensor {
         Self {
             blob,
             shape: shape.to_vec(),
-            grad: None,
         }
     }
     pub fn zeros(shape: &[usize]) -> Self {
         Self {
             blob: vec![0.; shape.iter().fold(1, |curr, s| curr * s)],
             shape: shape.to_vec(),
-            grad: None,
         }
     }
     pub fn iden(n: usize) -> Self {
@@ -335,85 +330,65 @@ impl Tensor {
                 .map(|i| if i / n == i % n { 1. } else { 0. })
                 .collect(),
             shape: vec![n, n],
-            grad: None,
         }
     }
     pub fn scalar(v: f32) -> Self {
         Self {
             blob: vec![v],
             shape: vec![],
-            grad: None,
         }
+    }
+    pub fn add<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
+        let mut output = Tensor::zeros(a.shape());
+        let mut shape = b.shape().to_vec();
+        shape.insert(0, 0);
+        for mut t in output.reshape_mut(&shape).iter_mut() {
+            assert_eq!(t.shape(), b.shape());
+            t.blob_mut()
+                .iter_mut()
+                .zip(b.blob().iter())
+                .for_each(|(t, a)| *t += a);
+        }
+        output
+    }
+    pub fn mul_f32<A: TensorOps>(graph: &mut Graph, a: &A, b: f32) -> Tensor {
+        let mut output = Tensor::zeros(a.shape());
+        output.blob_mut().iter_mut().for_each(|t| *t *= b);
+        output
+    }
+    pub fn mul_tensor<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
+        let mut output = Tensor::zeros(a.shape());
+        let mut shape = b.shape().to_vec();
+        shape.insert(0, 0);
+        for mut t in output.reshape_mut(&shape).iter_mut() {
+            assert_eq!(t.shape(), b.shape());
+            t.blob_mut()
+                .iter_mut()
+                .zip(b.blob().iter())
+                .for_each(|(t, a)| *t *= a);
+        }
+        output
+    }
+    pub fn sub<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
+        let neg_b = Self::mul_f32(graph, b, -1.);
+        Self::add(graph, a, &neg_b)
     }
 }
 
 use std::ops::*;
 
-impl Add for &Tensor {
-    type Output = Tensor;
-
-    fn add(self, other: &Tensor) -> Self::Output {
-        let mut output = self.clone();
-        let mut shape = other.shape().to_vec();
-        shape.insert(0, 0);
-        for mut t in output.reshape_mut(&shape).iter_mut() {
-            assert_eq!(t.shape(), other.shape());
-            t.blob_mut()
-                .iter_mut()
-                .zip(other.blob.iter())
-                .for_each(|(t, a)| *t += a);
-        }
-        output
-    }
-}
-impl Sub for &Tensor {
-    type Output = Tensor;
-
-    fn sub(self, other: &Tensor) -> Self::Output {
-        self + &(other * -1.)
-    }
-}
-
-impl Mul for &Tensor {
-    type Output = Tensor;
-
-    fn mul(self, other: &Tensor) -> Self::Output {
-        let mut output = self.clone();
-        let mut shape = other.shape().to_vec();
-        shape.insert(0, 0);
-        for mut t in output.reshape_mut(&shape).iter_mut() {
-            assert_eq!(t.shape(), other.shape());
-            t.blob_mut()
-                .iter_mut()
-                .zip(other.blob.iter())
-                .for_each(|(t, a)| *t *= a);
-        }
-        output
-    }
-}
-
-impl Mul<f32> for &Tensor {
-    type Output = Tensor;
-
-    fn mul(self, other: f32) -> Self::Output {
-        let mut output = self.clone();
-        output.blob_mut().iter_mut().for_each(|t| *t *= other);
-        output
-    }
-}
-
 trait Module {
-    fn forward(&mut self, inp: &Tensor) -> Tensor;
+    fn forward(&mut self, graph: &mut Graph, inp: &Tensor) -> Tensor;
 }
 
 trait Loss {
-    fn loss(&mut self, inp: &Tensor, target: &Tensor) -> Tensor;
+    fn loss(&mut self, graph: &mut Graph, inp: &Tensor, target: &Tensor) -> Tensor;
 }
 
 pub struct ReLU;
 
 impl Module for ReLU {
-    fn forward(&mut self, inp: &Tensor) -> Tensor {
+    fn forward(&mut self, graph: &mut Graph, inp: &Tensor) -> Tensor {
         inp.map(|f| if f < 0.0 { 0.0 } else { f })
     }
 }
@@ -424,27 +399,49 @@ pub struct Linear {
 }
 
 impl Module for Linear {
-    fn forward(&mut self, inp: &Tensor) -> Tensor {
-        &Tensor::matmul(inp, &self.weights) + &self.bias
+    fn forward(&mut self, graph: &mut Graph, inp: &Tensor) -> Tensor {
+        let mul = Tensor::matmul(graph, inp, &self.weights);
+        Tensor::add(graph, &mul, &self.bias)
     }
 }
 
 pub struct L2Loss;
 
 impl Loss for L2Loss {
-    fn loss(&mut self, inp: &Tensor, target: &Tensor) -> Tensor {
-        let diff = (inp - target);
-        &diff * &diff
+    fn loss(&mut self, graph: &mut Graph, inp: &Tensor, target: &Tensor) -> Tensor {
+        let diff = Tensor::sub(graph, inp, target);
+        Tensor::mul_tensor(graph, &diff, &diff)
+    }
+}
+
+type TensorId = usize;
+
+pub struct Graph {
+    grads: HashMap<TensorId, Tensor>,
+    tensors: HashMap<TensorId, Tensor>,
+    parents: HashMap<TensorId, Vec<TensorId>>,
+    children: HashMap<TensorId, Vec<TensorId>>,
+    next_tensor_id: TensorId,
+}
+
+impl Graph {
+    pub fn new() -> Self {
+        Self {
+            grads: Default::default(),
+            tensors: Default::default(),
+            parents: Default::default(),
+            children: Default::default(),
+            next_tensor_id: Default::default(),
+        }
+    }
+    pub fn alloc(&mut self, shape: &[usize]) -> TensorId {
+        let id = self.next_tensor_id;
+        self.tensors.insert(id, Tensor::zeros(shape));
+        self.next_tensor_id += 1;
+        id
     }
 }
 
 fn main() {
-    let mut rng = thread_rng();
-    let t1 = Tensor::rand(&mut rng, &[5, 5]);
-    let t2 = Tensor::rand(&mut rng, &[5, 5]);
-    let mut loss = L2Loss {};
-    println!("{}", loss.loss(&t1, &t1).sum());
-    println!("{}", loss.loss(&t2, &t2).sum());
-    println!("{}", loss.loss(&t1, &t2).sum());
-    //println!("{:?}", &(&t1 + &t2) * 5.);
+    let mut g = Graph::new();
 }
