@@ -100,13 +100,14 @@ pub trait TensorMutOps: TensorOps {
         self.blob_mut().clone_from_slice(t.blob());
     }
     fn reshape_mut(&mut self, shape: &[usize]) -> TensorMutView {
-        let new_size = shape.iter().fold(1, |c, s| c * s);
+        let final_shape = reshape(self.size(), shape);
+        let new_size = final_shape.iter().fold(1, |c, s| c * s);
         assert_eq!(new_size, self.size());
         let offset = self.offset();
         TensorMutView {
             mirror: self.tensor_mut(),
             offset: offset,
-            shape: shape.to_vec(),
+            shape: final_shape.to_vec(),
         }
     }
     fn get_mut(&mut self, ind: usize) -> TensorMutView {
@@ -125,6 +126,20 @@ pub trait TensorMutOps: TensorOps {
             index: 0,
         }
     }
+}
+
+fn reshape(size: usize, shape: &[usize]) -> Vec<usize> {
+    let mut final_shape = shape.to_vec();
+    if shape[0] == 0 && shape[1..].iter().all(|s| *s != 0) {
+        let mul = shape[1..].iter().fold(1, |c, s| c * s);
+        final_shape[0] = size / mul;
+    } else if shape[shape.len() - 1] == 0 && shape[0..shape.len() - 1].iter().all(|s| *s != 0) {
+        let mul = shape[..shape.len() - 1].iter().fold(1, |c, s| c * s);
+        final_shape[shape.len() - 1] = size / mul;
+    } else {
+        assert!(shape.iter().all(|s| *s != 0));
+    };
+    final_shape
 }
 
 pub trait TensorOps: Sized {
@@ -160,16 +175,7 @@ pub trait TensorOps: Sized {
         self.shape().iter().fold(1, |curr, s| curr * s)
     }
     fn reshape(&self, shape: &[usize]) -> TensorView {
-        let mut final_shape = shape.to_vec();
-        if shape[0] == 0 && shape[1..].iter().all(|s| *s != 0) {
-            let mul = shape[1..].iter().fold(1, |c, s| c * s);
-            final_shape[0] = self.size() / mul;
-        } else if shape[shape.len() - 1] == 0 && shape[0..shape.len() - 1].iter().all(|s| *s != 0) {
-            let mul = shape[..shape.len() - 1].iter().fold(1, |c, s| c * s);
-            final_shape[shape.len() - 1] = self.size() / mul;
-        } else {
-            assert!(shape.iter().all(|s| *s != 0));
-        };
+        let final_shape = reshape(self.size(), shape);
         let new_size = final_shape.iter().fold(1, |c, s| c * s);
         assert_eq!(new_size, self.size());
         let offset = self.offset();
@@ -267,18 +273,12 @@ impl Tensor {
         let mut final_shape = a.shape().to_vec();
         final_shape[a.dim() - 1] = b.shape()[1];
 
-        let final_shape_size = final_shape[a.dim() - 2] * final_shape[a.dim() - 1];
-
-        let reshaped_a = a.reshape(&[
-            a.size() / a.shape()[a.dim() - 2] / a.shape()[a.dim() - 1],
-            a.shape()[a.dim() - 2],
-            a.shape()[a.dim() - 1],
-        ]);
+        let reshaped_a = a.reshape(&[0, a.shape()[a.dim() - 2], a.shape()[a.dim() - 1]]);
 
         let mut result = Self::zeros(&final_shape);
         for (mut t, corr_a) in result
             .reshape_mut(&[
-                result.size() / final_shape_size,
+                0,
                 final_shape[final_shape.len() - 2],
                 final_shape[final_shape.len() - 1],
             ])
@@ -349,7 +349,5 @@ impl Module for Linear {
 fn main() {
     let mut rng = thread_rng();
     let t = Tensor::rand(&mut rng, &[6, 7, 4, 5]);
-
-    println!("{:?}", t.reshape(&[6, 7, 0]).shape());
-    println!("{:?}", t.reshape(&[0, 4, 5]).shape());
+    Tensor::matmul(&t, &Tensor::iden(5));
 }
