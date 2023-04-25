@@ -345,6 +345,6 @@ fn main() {
         bias: Tensor::zeros(&[5]),
     };
 
-    let res = lin.forward(&t.clone().into());
+    let res = lin.forward(&t);
     println!("{:?}\n{:?}", t, res);
 }
