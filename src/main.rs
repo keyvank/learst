@@ -85,6 +85,10 @@ pub trait TensorMutOps: TensorOps {
     fn fill(&mut self, v: f32) {
         self.blob_mut().fill(v);
     }
+    fn set<T: TensorOps>(&mut self, t: &T) {
+        assert_eq!(self.shape(), t.shape());
+        self.blob_mut().clone_from_slice(t.blob());
+    }
     fn reshape_mut(&mut self, shape: &[usize]) -> TensorMutView {
         let new_size = shape.iter().fold(1, |c, s| c * s);
         assert_eq!(new_size, self.size());
@@ -274,7 +278,9 @@ impl Module for Linear {
 fn main() {
     let mut t = Tensor::zeros(&[3, 4, 5]);
     for (i, mut t) in t.iter_mut().enumerate() {
-        t.fill(i as f32);
+        let mut t2 = Tensor::zeros(&[4, 5]);
+        t2.fill(i as f32);
+        t.set(&t2);
     }
     println!("{:?}", t);
 }
