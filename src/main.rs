@@ -84,6 +84,14 @@ impl<'a, T: TensorMutOps> Iterator for TensorIterMut<'a, T> {
 pub trait TensorMutOps: TensorOps {
     fn blob_mut(&mut self) -> &mut [f32];
     fn tensor_mut(&mut self) -> &mut Tensor;
+
+    fn set_scalar(&mut self, f: f32) {
+        if self.dim() == 0 {
+            self.blob_mut()[0] = f;
+        } else {
+            panic!("Tensor is not a scalar!")
+        }
+    }
     fn fill(&mut self, v: f32) {
         self.blob_mut().fill(v);
     }
@@ -125,6 +133,14 @@ pub trait TensorOps: Sized {
 
     fn tensor(&self) -> &Tensor;
     fn offset(&self) -> usize;
+
+    fn scalar(&self) -> f32 {
+        if self.dim() == 0 {
+            self.blob()[0]
+        } else {
+            panic!("Tensor is not a scalar!")
+        }
+    }
     fn iter<'a>(&'a self) -> TensorIter<'a, Self> {
         TensorIter {
             target: self,
@@ -205,7 +221,6 @@ impl TensorOps for TensorMutView<'_> {
     fn tensor(&self) -> &Tensor {
         &self.mirror
     }
-
     fn offset(&self) -> usize {
         self.offset
     }
@@ -235,13 +250,44 @@ impl TensorOps for TensorView<'_> {
 
 impl Tensor {
     pub fn matmul<A: TensorOps, B: TensorOps>(a: &A, b: &B) -> Tensor {
-        assert_eq!(a.dim(), 2);
+        assert!(a.dim() >= 2);
         assert_eq!(b.dim(), 2);
-        let a_1 = a.shape()[0];
-        let b_2 = b.shape()[1];
-        assert_eq!(a.shape()[1], b.shape()[0]);
-        let final_shape = vec![a.shape()[0], b.shape()[1]];
+        assert_eq!(a.shape()[a.dim() - 1], b.shape()[0]);
+
+        let mut final_shape = a.shape().to_vec();
+        final_shape[a.dim() - 1] = b.shape()[1];
+
+        let final_shape_size = final_shape[a.dim() - 2] * final_shape[a.dim() - 1];
+
+        let reshaped_a = a.reshape(&[
+            a.size() / a.shape()[a.dim() - 2] / a.shape()[a.dim() - 1],
+            a.shape()[a.dim() - 2],
+            a.shape()[a.dim() - 1],
+        ]);
+
         let mut result = Self::zeros(&final_shape);
+        for (mut t, corr_a) in result
+            .reshape_mut(&[
+                result.size() / final_shape_size,
+                final_shape[final_shape.len() - 2],
+                final_shape[final_shape.len() - 1],
+            ])
+            .iter_mut()
+            .zip(reshaped_a.iter())
+        {
+            for i in 0..final_shape[final_shape.len() - 2] {
+                for j in 0..final_shape[final_shape.len() - 1] {
+                    let aa = corr_a.blob();
+                    let bb = b.blob();
+                    let mut sum = 0.;
+                    for k in 0..b.shape()[0] {
+                        sum += aa[i * b.shape()[0] + k]
+                            * bb[k * final_shape[final_shape.len() - 1] + j];
+                    }
+                    t.get_mut(i).get_mut(j).set_scalar(sum);
+                }
+            }
+        }
         result
     }
     pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Self {
@@ -259,6 +305,14 @@ impl Tensor {
             shape: shape.to_vec(),
         }
     }
+    pub fn iden(n: usize) -> Self {
+        Self {
+            blob: (0..n * n)
+                .map(|i| if i / n == i % n { 1. } else { 0. })
+                .collect(),
+            shape: vec![n, n],
+        }
+    }
     pub fn scalar(v: f32) -> Self {
         Self {
             blob: vec![v],
@@ -268,7 +322,7 @@ impl Tensor {
 }
 
 trait Module {
-    fn forward(&mut self, inp: Tensor) -> Tensor;
+    fn forward(&mut self, inp: &Tensor) -> Tensor;
 }
 
 pub struct Linear {
@@ -277,17 +331,20 @@ pub struct Linear {
 }
 
 impl Module for Linear {
-    fn forward(&mut self, inp: Tensor) -> Tensor {
-        inp
+    fn forward(&mut self, inp: &Tensor) -> Tensor {
+        Tensor::matmul(inp, &self.weights)
     }
 }
 
 fn main() {
     let mut rng = thread_rng();
-    let mut t = Tensor::zeros(&[10, 3, 2, 4, 5]);
-    for (i, mut t) in t.reshape_mut(&[30, 2, 4, 5]).iter_mut().enumerate() {
-        let t2 = Tensor::rand(&mut rng, &[2, 4, 5]);
-        t.set(&t2);
-    }
-    println!("{:?}", t);
+    let t = Tensor::rand(&mut rng, &[6, 7, 4, 5]);
+
+    let mut lin = Linear {
+        weights: Tensor::iden(5),
+        bias: Tensor::zeros(&[5]),
+    };
+
+    let res = lin.forward(&t.clone().into());
+    println!("{:?}\n{:?}", t, res);
 }
