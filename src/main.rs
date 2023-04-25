@@ -1,3 +1,5 @@
+use rand::prelude::*;
+
 #[derive(Debug, Clone)]
 pub struct Tensor {
     blob: Vec<f32>,
@@ -233,18 +235,23 @@ impl TensorOps for TensorView<'_> {
 
 impl Tensor {
     pub fn matmul<A: TensorOps, B: TensorOps>(a: &A, b: &B) -> Tensor {
-        assert!(a.dim() >= 2);
+        assert_eq!(a.dim(), 2);
         assert_eq!(b.dim(), 2);
-        let a_1 = a.shape()[a.dim() - 2];
-        let a_2 = a.shape()[a.dim() - 1];
-        let b_1 = b.shape()[b.dim() - 2];
-        let b_2 = b.shape()[b.dim() - 1];
-        assert_eq!(a_2, b_1);
-        let mut final_shape = a.shape().to_vec();
-        final_shape[a.dim() - 1] = b_2;
+        let a_1 = a.shape()[0];
+        let b_2 = b.shape()[1];
+        assert_eq!(a.shape()[1], b.shape()[0]);
+        let final_shape = vec![a.shape()[0], b.shape()[1]];
         let mut result = Self::zeros(&final_shape);
-
         result
+    }
+    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Self {
+        let blob: Vec<f32> = (0..shape.iter().fold(1, |curr, s| curr * s))
+            .map(|_| r.gen())
+            .collect();
+        Self {
+            blob,
+            shape: shape.to_vec(),
+        }
     }
     pub fn zeros(shape: &[usize]) -> Self {
         Self {
@@ -276,10 +283,10 @@ impl Module for Linear {
 }
 
 fn main() {
-    let mut t = Tensor::zeros(&[3, 4, 5]);
-    for (i, mut t) in t.iter_mut().enumerate() {
-        let mut t2 = Tensor::zeros(&[4, 5]);
-        t2.fill(i as f32);
+    let mut rng = thread_rng();
+    let mut t = Tensor::zeros(&[10, 3, 2, 4, 5]);
+    for (i, mut t) in t.reshape_mut(&[30, 2, 4, 5]).iter_mut().enumerate() {
+        let t2 = Tensor::rand(&mut rng, &[2, 4, 5]);
         t.set(&t2);
     }
     println!("{:?}", t);
