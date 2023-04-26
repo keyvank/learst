@@ -21,24 +21,6 @@ pub struct TensorMutView<'a> {
     shape: Vec<usize>,
 }
 
-impl<'a> From<&TensorView<'a>> for Tensor {
-    fn from(view: &TensorView<'a>) -> Self {
-        Self {
-            blob: view.blob().to_vec(),
-            shape: view.shape().to_vec(),
-        }
-    }
-}
-
-impl<'a> From<&TensorMutView<'a>> for Tensor {
-    fn from(view: &TensorMutView<'a>) -> Self {
-        Self {
-            blob: view.blob().to_vec(),
-            shape: view.shape().to_vec(),
-        }
-    }
-}
-
 pub struct TensorIter<'a, T: TensorOps> {
     target: &'a T,
     index: usize,
@@ -150,12 +132,6 @@ pub trait TensorOps: Sized {
     fn offset(&self) -> usize;
     fn sum(&self) -> f32 {
         self.blob().iter().sum()
-    }
-    fn map<F: Fn(f32) -> f32>(&self, f: F) -> Tensor {
-        Tensor {
-            blob: self.blob().iter().map(|v| f(*v)).collect(),
-            shape: self.shape().to_vec(),
-        }
     }
 
     fn scalar(&self) -> f32 {
@@ -274,6 +250,35 @@ impl TensorOps for TensorView<'_> {
 }
 
 impl Tensor {
+    pub fn iden(n: usize) -> Self {
+        Tensor {
+            blob: (0..n * n)
+                .map(|i| if i / n == i % n { 1. } else { 0. })
+                .collect(),
+            shape: vec![n, n],
+        }
+    }
+    pub fn scalar(v: f32) -> Self {
+        Tensor {
+            blob: vec![v],
+            shape: vec![],
+        }
+    }
+    pub fn zeros(shape: &[usize]) -> Self {
+        Tensor {
+            blob: vec![0.; shape.iter().fold(1, |curr, s| curr * s)],
+            shape: shape.to_vec(),
+        }
+    }
+    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Self {
+        Tensor {
+            blob: (0..shape.iter().fold(1, |curr, s| curr * s))
+                .map(|_| r.gen::<f32>() * 2. - 1.)
+                .collect(),
+            shape: shape.to_vec(),
+        }
+    }
+    /*
     pub fn matmul<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
         assert!(a.dim() >= 2);
         assert_eq!(b.dim(), 2);
@@ -308,37 +313,8 @@ impl Tensor {
             }
         }
         result
-    }
-    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Self {
-        let blob: Vec<f32> = (0..shape.iter().fold(1, |curr, s| curr * s))
-            .map(|_| r.gen::<f32>() * 2. - 1.)
-            .collect();
-        Self {
-            blob,
-            shape: shape.to_vec(),
-        }
-    }
-    pub fn zeros(shape: &[usize]) -> Self {
-        Self {
-            blob: vec![0.; shape.iter().fold(1, |curr, s| curr * s)],
-            shape: shape.to_vec(),
-        }
-    }
-    pub fn iden(n: usize) -> Self {
-        Self {
-            blob: (0..n * n)
-                .map(|i| if i / n == i % n { 1. } else { 0. })
-                .collect(),
-            shape: vec![n, n],
-        }
-    }
-    pub fn scalar(v: f32) -> Self {
-        Self {
-            blob: vec![v],
-            shape: vec![],
-        }
-    }
-    pub fn add<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
+    }*/
+    pub fn add(a: &Tensor, b: &Tensor) -> Tensor {
         let mut output = Tensor::zeros(a.shape());
         let mut shape = b.shape().to_vec();
         shape.insert(0, 0);
@@ -351,7 +327,7 @@ impl Tensor {
         }
         output
     }
-    pub fn mul_f32<A: TensorOps>(graph: &mut Graph, a: &A, b: f32) -> Tensor {
+    /*pub fn mul_f32<A: TensorOps>(graph: &mut Graph, a: &A, b: f32) -> Tensor {
         let mut output = Tensor::zeros(a.shape());
         output.blob_mut().iter_mut().for_each(|t| *t *= b);
         output
@@ -372,10 +348,8 @@ impl Tensor {
     pub fn sub<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
         let neg_b = Self::mul_f32(graph, b, -1.);
         Self::add(graph, a, &neg_b)
-    }
+    }*/
 }
-
-use std::ops::*;
 
 trait Module {
     fn forward(&mut self, graph: &mut Graph, inp: &Tensor) -> Tensor;
@@ -385,7 +359,7 @@ trait Loss {
     fn loss(&mut self, graph: &mut Graph, inp: &Tensor, target: &Tensor) -> Tensor;
 }
 
-pub struct ReLU;
+/*pub struct ReLU;
 
 impl Module for ReLU {
     fn forward(&mut self, graph: &mut Graph, inp: &Tensor) -> Tensor {
@@ -412,10 +386,34 @@ impl Loss for L2Loss {
         let diff = Tensor::sub(graph, inp, target);
         Tensor::mul_tensor(graph, &diff, &diff)
     }
+}*/
+
+pub trait Function {
+    fn run(&self, inps: &[&Tensor]) -> Tensor;
+    fn grad(&self, inp_grads: &mut [&mut Tensor], out_grad: &Tensor);
 }
 
-type TensorId = usize;
+pub struct Add;
+impl Add {
+    pub fn new() -> Box<dyn Function> {
+        Box::new(Self {})
+    }
+}
+impl Function for Add {
+    fn run(&self, inps: &[&Tensor]) -> Tensor {
+        assert_eq!(inps.len(), 2);
+        Tensor::add(inps[0], inps[1])
+    }
+    fn grad(&self, inp_grads: &mut [&mut Tensor], out_grad: &Tensor) {
+        assert_eq!(inp_grads.len(), 2);
+        *inp_grads[0] = Tensor::add(inp_grads[0], out_grad);
+        *inp_grads[1] = Tensor::add(inp_grads[1], out_grad);
+    }
+}
 
+pub type TensorId = usize;
+
+#[derive(Debug, Clone)]
 pub struct Graph {
     grads: HashMap<TensorId, Tensor>,
     tensors: HashMap<TensorId, Tensor>,
@@ -434,14 +432,39 @@ impl Graph {
             next_tensor_id: Default::default(),
         }
     }
-    pub fn alloc(&mut self, shape: &[usize]) -> TensorId {
+    pub fn alloc(&mut self, tensor: Tensor) -> TensorId {
         let id = self.next_tensor_id;
-        self.tensors.insert(id, Tensor::zeros(shape));
+        self.tensors.insert(id, tensor);
         self.next_tensor_id += 1;
         id
+    }
+    pub fn zero_grad(&mut self) {
+        self.grads.clear();
+    }
+    pub fn get(&self, id: TensorId) -> &Tensor {
+        self.tensors.get(&id).expect("Tensor not found!")
+    }
+    pub fn topology(&self) -> Vec<TensorId> {
+        vec![]
+    }
+    pub fn backward(&mut self, id: TensorId) {
+        let shape = &self.get(id).shape;
+        self.grads.insert(id, Tensor::zeros(&shape));
+    }
+    pub fn call(&mut self, f: Box<dyn Function>, tensor_ids: &[TensorId]) -> TensorId {
+        let tensors = tensor_ids
+            .iter()
+            .map(|id| self.tensors.get(id).expect("Tensor not found!"))
+            .collect::<Vec<_>>();
+        self.alloc(f.run(&tensors))
     }
 }
 
 fn main() {
+    let mut rng = thread_rng();
     let mut g = Graph::new();
+    let t1 = g.alloc(Tensor::rand(&mut rng, &[3, 4, 5]));
+    let t2 = g.alloc(Tensor::rand(&mut rng, &[3, 4, 5]));
+    let t3 = g.call(Add::new(), &[t1, t2]);
+    println!("{} {} {}", t1, t2, t3);
 }
