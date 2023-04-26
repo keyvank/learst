@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct Tensor {
@@ -417,8 +417,7 @@ pub type TensorId = usize;
 pub struct Graph {
     grads: HashMap<TensorId, Tensor>,
     tensors: HashMap<TensorId, Tensor>,
-    parents: HashMap<TensorId, Vec<TensorId>>,
-    children: HashMap<TensorId, Vec<TensorId>>,
+    parents: HashMap<TensorId, HashSet<TensorId>>,
     next_tensor_id: TensorId,
 }
 
@@ -428,7 +427,6 @@ impl Graph {
             grads: Default::default(),
             tensors: Default::default(),
             parents: Default::default(),
-            children: Default::default(),
             next_tensor_id: Default::default(),
         }
     }
@@ -444,27 +442,55 @@ impl Graph {
     pub fn get(&self, id: TensorId) -> &Tensor {
         self.tensors.get(&id).expect("Tensor not found!")
     }
-    pub fn topology(&self) -> Vec<TensorId> {
-        vec![]
+    pub fn topology(&self, root: TensorId) -> Vec<TensorId> {
+        let mut visited = HashSet::<TensorId>::new();
+        let mut to_visit = vec![root];
+        let mut order = Vec::new();
+        while let Some(id) = to_visit.pop() {
+            if !visited.contains(&id) {
+                visited.insert(id);
+                for child in self.parents.get(&id).cloned().unwrap_or_default() {
+                    to_visit.insert(0, child);
+                }
+                order.push(id);
+            }
+        }
+
+        order
     }
-    pub fn backward(&mut self, id: TensorId) {
+    pub fn backward(&mut self, _id: TensorId) {}
+    pub fn backward_all(&mut self, id: TensorId) {
         let shape = &self.get(id).shape;
         self.grads.insert(id, Tensor::zeros(&shape));
+
+        for t in self.topology(id) {
+            self.backward(t);
+        }
     }
     pub fn call(&mut self, f: Box<dyn Function>, tensor_ids: &[TensorId]) -> TensorId {
         let tensors = tensor_ids
             .iter()
             .map(|id| self.tensors.get(id).expect("Tensor not found!"))
             .collect::<Vec<_>>();
-        self.alloc(f.run(&tensors))
+        let child = self.alloc(f.run(&tensors));
+        for parent in tensor_ids {
+            self.parents.entry(child).or_default().insert(*parent);
+        }
+        child
     }
 }
 
 fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
+
+    // 1
+    //   > 2     > 4
+    // 0     > 3
+    let t0 = g.alloc(Tensor::rand(&mut rng, &[3, 4, 5]));
     let t1 = g.alloc(Tensor::rand(&mut rng, &[3, 4, 5]));
-    let t2 = g.alloc(Tensor::rand(&mut rng, &[3, 4, 5]));
-    let t3 = g.call(Add::new(), &[t1, t2]);
-    println!("{} {} {}", t1, t2, t3);
+    let t2 = g.call(Add::new(), &[t0, t1]);
+    let t3 = g.call(Add::new(), &[t0, t2]);
+    let t4 = g.call(Add::new(), &[t3, t2]);
+    g.backward_all(t4);
 }
