@@ -14,6 +14,24 @@ pub struct TensorView<'a> {
     shape: Vec<usize>,
 }
 
+impl<'a> TensorView<'a> {
+    fn zoom(&mut self, ind: usize) {
+        assert!(ind < self.shape[0]);
+        let sub_size = self.size() / self.len();
+        self.shape.remove(0);
+        self.offset += sub_size * ind;
+    }
+}
+
+impl<'a> TensorMutView<'a> {
+    fn zoom(&mut self, ind: usize) {
+        assert!(ind < self.shape[0]);
+        let sub_size = self.size() / self.len();
+        self.shape.remove(0);
+        self.offset += sub_size * ind;
+    }
+}
+
 #[derive(Debug)]
 pub struct TensorMutView<'a> {
     mirror: &'a mut Tensor,
@@ -68,6 +86,13 @@ pub trait TensorMutOps: TensorOps {
     fn blob_mut(&mut self) -> &mut [f32];
     fn tensor_mut(&mut self) -> &mut Tensor;
 
+    fn view_mut(&mut self) -> TensorMutView {
+        TensorMutView {
+            offset: self.offset(),
+            shape: self.shape().to_vec(),
+            mirror: self.tensor_mut(),
+        }
+    }
     fn set_scalar(&mut self, f: f32) {
         if self.dim() == 0 {
             self.blob_mut()[0] = f;
@@ -94,14 +119,9 @@ pub trait TensorMutOps: TensorOps {
         }
     }
     fn get_mut(&mut self, ind: usize) -> TensorMutView {
-        let sub_size = self.size() / self.len();
-        let shape = self.shape()[1..].to_vec();
-        let offset = self.offset();
-        TensorMutView {
-            mirror: self.tensor_mut(),
-            offset: offset + sub_size * ind,
-            shape,
-        }
+        let mut v = self.view_mut();
+        v.zoom(ind);
+        v
     }
     fn iter_mut<'a>(&'a mut self) -> TensorIterMut<'a, Self> {
         TensorIterMut {
@@ -159,6 +179,13 @@ pub trait TensorOps: Sized {
     fn size(&self) -> usize {
         self.shape().iter().fold(1, |curr, s| curr * s)
     }
+    fn view(&self) -> TensorView {
+        TensorView {
+            mirror: self.tensor(),
+            offset: self.offset(),
+            shape: self.shape().to_vec(),
+        }
+    }
     fn reshape(&self, shape: &[usize]) -> TensorView {
         let final_shape = reshape(self.size(), shape);
         let new_size = final_shape.iter().fold(1, |c, s| c * s);
@@ -172,14 +199,9 @@ pub trait TensorOps: Sized {
     }
 
     fn get(&self, ind: usize) -> TensorView {
-        let sub_size = self.size() / self.len();
-        let shape = self.shape()[1..].to_vec();
-        let offset = self.offset();
-        TensorView {
-            mirror: self.tensor(),
-            offset: offset + sub_size * ind,
-            shape,
-        }
+        let mut v = self.view();
+        v.zoom(ind);
+        v
     }
 }
 
@@ -249,6 +271,77 @@ impl TensorOps for TensorView<'_> {
     }
 }
 
+fn combine_shapes(a: &[usize], b: &[usize], op_dim: usize) -> Vec<usize> {
+    assert!(a.len() >= op_dim);
+    assert!(b.len() >= op_dim);
+    let shape_len = std::cmp::max(a.len(), b.len());
+    let mut shape = Vec::new();
+    for i in op_dim..shape_len {
+        shape.insert(
+            0,
+            if i >= a.len() {
+                b[b.len() - 1 - i]
+            } else if i >= b.len() {
+                a[a.len() - 1 - i]
+            } else {
+                let (a, b) = (a[a.len() - 1 - i], b[b.len() - 1 - i]);
+                if a == b {
+                    a
+                } else if a == 1 {
+                    b
+                } else if b == 1 {
+                    a
+                } else {
+                    panic!("Cannot be combined!")
+                }
+            },
+        );
+    }
+    shape
+}
+
+fn apply<F: Fn(TensorView, TensorView, TensorMutView)>(
+    a: &Tensor,
+    b: &Tensor,
+    op_dim: usize,
+    op: F,
+) -> Tensor {
+    let shape = combine_shapes(a.shape(), b.shape(), op_dim);
+
+    let mut result_shape = shape.clone();
+    let op_lhs_shape = a.shape()[a.shape().len() - op_dim..].to_vec();
+    let op_rhs_shape = b.shape()[b.shape().len() - op_dim..].to_vec();
+    result_shape.push(op_lhs_shape[0]);
+    result_shape.push(op_rhs_shape[1]);
+    let mut result = Tensor::zeros(&result_shape);
+
+    let mut curr = vec![0; shape.len()];
+    let mut finished = false;
+    while !finished {
+        let mut rv = result.view_mut();
+        let mut av = a.view();
+        let mut bv = b.view();
+        for d in curr.iter() {
+            rv.zoom(*d);
+            av.zoom(if av.shape()[0] == 1 { 0 } else { *d });
+            bv.zoom(if bv.shape()[0] == 1 { 0 } else { *d });
+        }
+        op(av, bv, rv);
+        curr[0] += 1;
+        for i in 0..curr.len() {
+            if curr[i] == shape[i] {
+                if i == curr.len() - 1 {
+                    finished = true;
+                    break;
+                }
+                curr[i] = 0;
+                curr[i + 1] += 1;
+            }
+        }
+    }
+    result
+}
+
 impl Tensor {
     pub fn iden(n: usize) -> Self {
         Tensor {
@@ -284,42 +377,25 @@ impl Tensor {
             shape: shape.to_vec(),
         }
     }
-    /*
-    pub fn matmul<A: TensorOps, B: TensorOps>(graph: &mut Graph, a: &A, b: &B) -> Tensor {
-        assert!(a.dim() >= 2);
+
+    pub fn matmul<A: TensorOps, B: TensorOps, C: TensorMutOps>(a: &A, b: &B, c: &mut C) {
+        assert_eq!(a.dim(), 2);
         assert_eq!(b.dim(), 2);
-        assert_eq!(a.shape()[a.dim() - 1], b.shape()[0]);
+        assert_eq!(c.dim(), 2);
+        assert_eq!(c.shape()[0], a.shape()[0]);
+        assert_eq!(a.shape()[1], b.shape()[0]);
+        assert_eq!(c.shape()[1], b.shape()[1]);
 
-        let mut final_shape = a.shape().to_vec();
-        final_shape[a.dim() - 1] = b.shape()[1];
-
-        let reshaped_a = a.reshape(&[0, a.shape()[a.dim() - 2], a.shape()[a.dim() - 1]]);
-
-        let mut result = Self::zeros(&final_shape);
-        for (mut t, corr_a) in result
-            .reshape_mut(&[
-                0,
-                final_shape[final_shape.len() - 2],
-                final_shape[final_shape.len() - 1],
-            ])
-            .iter_mut()
-            .zip(reshaped_a.iter())
-        {
-            for i in 0..final_shape[final_shape.len() - 2] {
-                for j in 0..final_shape[final_shape.len() - 1] {
-                    let aa = corr_a.blob();
-                    let bb = b.blob();
-                    let mut sum = 0.;
-                    for k in 0..b.shape()[0] {
-                        sum += aa[i * b.shape()[0] + k]
-                            * bb[k * final_shape[final_shape.len() - 1] + j];
-                    }
-                    t.get_mut(i).get_mut(j).set_scalar(sum);
+        for i in 0..c.shape()[0] {
+            for j in 0..c.shape()[1] {
+                let mut sum = 0.;
+                for k in 0..b.shape()[0] {
+                    sum += a.get(i).get(k).scalar() * b.get(k).get(j).scalar();
                 }
+                c.get_mut(i).get_mut(j).set_scalar(sum);
             }
         }
-        result
-    }*/
+    }
     pub fn add(a: &Tensor, b: &Tensor) -> Tensor {
         let mut output = a.clone();
         let mut shape = b.shape().to_vec();
@@ -417,6 +493,25 @@ impl Function for Add {
     }
 }
 
+pub struct Mul;
+impl Mul {
+    pub fn new() -> Box<dyn Function> {
+        Box::new(Self {})
+    }
+}
+impl Function for Mul {
+    fn run(&self, inps: &[&Tensor]) -> Tensor {
+        assert_eq!(inps.len(), 2);
+        apply(inps[0], inps[1], 2, |a, b, c| {});
+        Tensor::scalar(0.)
+    }
+    fn grad(&self, grads: &mut HashMap<TensorId, Tensor>, inps: &[TensorId], out: TensorId) {
+        assert_eq!(inps.len(), 2);
+        //grads.insert(inps[0], Tensor::add(&grads[&inps[0]], &grads[&out]));
+        //grads.insert(inps[1], Tensor::add(&grads[&inps[1]], &grads[&out]));
+    }
+}
+
 struct Computation {
     inps: Vec<TensorId>,
     func: Box<dyn Function>,
@@ -508,14 +603,22 @@ impl Graph {
 }
 
 fn main() {
-    let mut rng = thread_rng();
+    let out = apply(
+        &Tensor::zeros(&[3, 1, 4, 5, 6]),
+        &Tensor::zeros(&[1, 5, 4, 6, 7]),
+        2,
+        |a, b, mut c| {
+            Tensor::matmul(&a, &b, &mut c);
+        },
+    );
+    println!("{:?}", out.shape());
+
+    /*let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let t0 = g.alloc(Tensor::rand(&mut rng, &[2, 1]));
-    let t1 = g.alloc(Tensor::rand(&mut rng, &[2, 1]));
-    let t2 = g.call(Add::new(), &[t0, t0]);
-    let t3 = g.call(Add::new(), &[t2, t0]);
-    let t4 = g.call(Add::new(), &[t3, t1]);
-    g.backward_all(t4);
-    println!("{:?}", g.grads);
+    let t0 = g.alloc(Tensor::rand(&mut rng, &[10, 3, 4]));
+    let t1 = g.alloc(Tensor::rand(&mut rng, &[3, 4]));
+    let t2 = g.call(Add::new(), &[t0, t1]);
+    g.backward_all(t2);
+    println!("{:?}", g.get(t2).shape());*/
 }
