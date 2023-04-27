@@ -300,19 +300,13 @@ fn combine_shapes(a: &[usize], b: &[usize], op_dim: usize) -> Vec<usize> {
     shape
 }
 
-fn apply<F: Fn(TensorView, TensorView, TensorMutView)>(
-    a: &Tensor,
-    b: &Tensor,
-    op_dim: usize,
-    op: F,
-) -> Tensor {
-    let shape = combine_shapes(a.shape(), b.shape(), op_dim);
+fn apply<Op: Operation>(a: &Tensor, b: &Tensor) -> Tensor {
+    let shape = combine_shapes(a.shape(), b.shape(), Op::input_dim());
 
     let mut result_shape = shape.clone();
-    let op_lhs_shape = a.shape()[a.shape().len() - op_dim..].to_vec();
-    let op_rhs_shape = b.shape()[b.shape().len() - op_dim..].to_vec();
-    result_shape.push(op_lhs_shape[0]);
-    result_shape.push(op_rhs_shape[1]);
+    let op_lhs_shape = a.shape()[a.shape().len() - Op::input_dim()..].to_vec();
+    let op_rhs_shape = b.shape()[b.shape().len() - Op::input_dim()..].to_vec();
+    result_shape.extend(Op::output_shape(&[&op_lhs_shape, &op_rhs_shape]));
     let mut result = Tensor::zeros(&result_shape);
 
     let mut curr = vec![0; shape.len()];
@@ -321,12 +315,16 @@ fn apply<F: Fn(TensorView, TensorView, TensorMutView)>(
         let mut rv = result.view_mut();
         let mut av = a.view();
         let mut bv = b.view();
-        for d in curr.iter() {
+        for (i, d) in curr.iter().enumerate() {
             rv.zoom(*d);
-            av.zoom(if av.shape()[0] == 1 { 0 } else { *d });
-            bv.zoom(if bv.shape()[0] == 1 { 0 } else { *d });
+            if i >= shape.len() + Op::input_dim() - a.shape.len() {
+                av.zoom(if av.shape()[0] == 1 { 0 } else { *d });
+            }
+            if i >= shape.len() + Op::input_dim() - b.shape.len() {
+                bv.zoom(if bv.shape()[0] == 1 { 0 } else { *d });
+            }
         }
-        op(av, bv, rv);
+        Op::apply(&[av, bv], &mut rv);
         curr[0] += 1;
         for i in 0..curr.len() {
             if curr[i] == shape[i] {
@@ -375,25 +373,6 @@ impl Tensor {
                 .map(|_| r.gen::<f32>() * 2. - 1.)
                 .collect(),
             shape: shape.to_vec(),
-        }
-    }
-
-    pub fn matmul<A: TensorOps, B: TensorOps, C: TensorMutOps>(a: &A, b: &B, c: &mut C) {
-        assert_eq!(a.dim(), 2);
-        assert_eq!(b.dim(), 2);
-        assert_eq!(c.dim(), 2);
-        assert_eq!(c.shape()[0], a.shape()[0]);
-        assert_eq!(a.shape()[1], b.shape()[0]);
-        assert_eq!(c.shape()[1], b.shape()[1]);
-
-        for i in 0..c.shape()[0] {
-            for j in 0..c.shape()[1] {
-                let mut sum = 0.;
-                for k in 0..b.shape()[0] {
-                    sum += a.get(i).get(k).scalar() * b.get(k).get(j).scalar();
-                }
-                c.get_mut(i).get_mut(j).set_scalar(sum);
-            }
         }
     }
     pub fn add(a: &Tensor, b: &Tensor) -> Tensor {
@@ -502,8 +481,7 @@ impl Mul {
 impl Function for Mul {
     fn run(&self, inps: &[&Tensor]) -> Tensor {
         assert_eq!(inps.len(), 2);
-        apply(inps[0], inps[1], 2, |a, b, c| {});
-        Tensor::scalar(0.)
+        apply::<MatMulOp>(inps[0], inps[1])
     }
     fn grad(&self, grads: &mut HashMap<TensorId, Tensor>, inps: &[TensorId], out: TensorId) {
         assert_eq!(inps.len(), 2);
@@ -602,16 +580,71 @@ impl Graph {
     }
 }
 
+trait Operation {
+    fn input_dim() -> usize;
+    fn output_shape(inp_shapes: &[&[usize]]) -> Vec<usize>;
+    fn apply(inps: &[TensorView], out: &mut TensorMutView);
+}
+
+struct AddOp;
+impl Operation for AddOp {
+    fn input_dim() -> usize {
+        0
+    }
+    fn output_shape(inp_shapes: &[&[usize]]) -> Vec<usize> {
+        assert_eq!(inp_shapes.len(), 2);
+        assert_eq!(inp_shapes[0].len(), 0);
+        assert_eq!(inp_shapes[1].len(), 0);
+        vec![]
+    }
+    fn apply(inps: &[TensorView], out: &mut TensorMutView) {
+        out.set_scalar(inps[0].scalar() + inps[1].scalar());
+    }
+}
+
+struct MatMulOp;
+impl Operation for MatMulOp {
+    fn input_dim() -> usize {
+        2
+    }
+    fn output_shape(inp_shapes: &[&[usize]]) -> Vec<usize> {
+        assert_eq!(inp_shapes.len(), 2);
+        assert_eq!(inp_shapes[0].len(), 2);
+        assert_eq!(inp_shapes[1].len(), 2);
+        assert_eq!(inp_shapes[0][1], inp_shapes[1][0]);
+        vec![inp_shapes[0][0], inp_shapes[1][1]]
+    }
+    fn apply(inps: &[TensorView], out: &mut TensorMutView) {
+        println!(
+            "{:?} {:?} {:?}",
+            inps[0].shape(),
+            inps[1].shape(),
+            out.shape()
+        );
+        for i in 0..out.shape()[0] {
+            for j in 0..out.shape()[1] {
+                let mut sum = 0.;
+                for k in 0..inps[1].shape()[0] {
+                    sum += inps[0].get(i).get(k).scalar() * inps[1].get(k).get(j).scalar();
+                }
+                out.get_mut(i).get_mut(j).set_scalar(sum);
+            }
+        }
+    }
+}
+
 fn main() {
-    let out = apply(
-        &Tensor::zeros(&[3, 1, 4, 5, 6]),
-        &Tensor::zeros(&[1, 5, 4, 6, 7]),
-        2,
-        |a, b, mut c| {
-            Tensor::matmul(&a, &b, &mut c);
-        },
+    let out_mul = apply::<MatMulOp>(
+        &Tensor::zeros(&[3, 5, 4, 5, 6]),
+        &Tensor::zeros(&[5, 4, 6, 7]),
     );
-    println!("{:?}", out.shape());
+    println!("{:?}", out_mul.shape());
+
+    let out_add = apply::<AddOp>(
+        &Tensor::zeros(&[3, 1, 4, 5, 6, 9]),
+        &Tensor::zeros(&[2, 4, 5, 1, 9]),
+    );
+    println!("{:?}", out_add.shape());
 
     /*let mut rng = thread_rng();
     let mut g = Graph::new();
