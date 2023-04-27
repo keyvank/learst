@@ -615,12 +615,6 @@ impl Operation for MatMulOp {
         vec![inp_shapes[0][0], inp_shapes[1][1]]
     }
     fn apply(inps: &[TensorView], out: &mut TensorMutView) {
-        println!(
-            "{:?} {:?} {:?}",
-            inps[0].shape(),
-            inps[1].shape(),
-            out.shape()
-        );
         for i in 0..out.shape()[0] {
             for j in 0..out.shape()[1] {
                 let mut sum = 0.;
