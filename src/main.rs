@@ -264,11 +264,17 @@ impl Tensor {
             shape: vec![],
         }
     }
-    pub fn zeros(shape: &[usize]) -> Self {
+    pub fn constant(shape: &[usize], value: f32) -> Self {
         Tensor {
-            blob: vec![0.; shape.iter().fold(1, |curr, s| curr * s)],
+            blob: vec![value; shape.iter().fold(1, |curr, s| curr * s)],
             shape: shape.to_vec(),
         }
+    }
+    pub fn zeros(shape: &[usize]) -> Self {
+        Self::constant(shape, 0.)
+    }
+    pub fn ones(shape: &[usize]) -> Self {
+        Self::constant(shape, 1.)
     }
     pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Self {
         Tensor {
@@ -315,7 +321,7 @@ impl Tensor {
         result
     }*/
     pub fn add(a: &Tensor, b: &Tensor) -> Tensor {
-        let mut output = Tensor::zeros(a.shape());
+        let mut output = a.clone();
         let mut shape = b.shape().to_vec();
         shape.insert(0, 0);
         for mut t in output.reshape_mut(&shape).iter_mut() {
@@ -390,7 +396,7 @@ impl Loss for L2Loss {
 
 pub trait Function {
     fn run(&self, inps: &[&Tensor]) -> Tensor;
-    fn grad(&self, inp_grads: &mut [&mut Tensor], out_grad: &Tensor);
+    fn grad(&self, grads: &mut HashMap<TensorId, Tensor>, inps: &[TensorId], out: TensorId);
 }
 
 pub struct Add;
@@ -404,18 +410,23 @@ impl Function for Add {
         assert_eq!(inps.len(), 2);
         Tensor::add(inps[0], inps[1])
     }
-    fn grad(&self, inp_grads: &mut [&mut Tensor], out_grad: &Tensor) {
-        assert_eq!(inp_grads.len(), 2);
-        *inp_grads[0] = Tensor::add(inp_grads[0], out_grad);
-        *inp_grads[1] = Tensor::add(inp_grads[1], out_grad);
+    fn grad(&self, grads: &mut HashMap<TensorId, Tensor>, inps: &[TensorId], out: TensorId) {
+        assert_eq!(inps.len(), 2);
+        grads.insert(inps[0], Tensor::add(&grads[&inps[0]], &grads[&out]));
+        grads.insert(inps[1], Tensor::add(&grads[&inps[1]], &grads[&out]));
     }
+}
+
+struct Computation {
+    inps: Vec<TensorId>,
+    func: Box<dyn Function>,
 }
 
 pub type TensorId = usize;
 
-#[derive(Debug, Clone)]
 pub struct Graph {
     grads: HashMap<TensorId, Tensor>,
+    computations: HashMap<TensorId, Computation>,
     tensors: HashMap<TensorId, Tensor>,
     parents: HashMap<TensorId, HashSet<TensorId>>,
     next_tensor_id: TensorId,
@@ -427,6 +438,7 @@ impl Graph {
             grads: Default::default(),
             tensors: Default::default(),
             parents: Default::default(),
+            computations: Default::default(),
             next_tensor_id: Default::default(),
         }
     }
@@ -458,10 +470,18 @@ impl Graph {
 
         order
     }
-    pub fn backward(&mut self, _id: TensorId) {}
+    pub fn backward(&mut self, id: TensorId) {
+        if let Some(comp) = self.computations.get(&id) {
+            for inp in comp.inps.iter() {
+                let shape = self.get(*inp).shape.clone();
+                self.grads.entry(*inp).or_insert(Tensor::zeros(&shape));
+            }
+            comp.func.grad(&mut self.grads, &comp.inps, id);
+        }
+    }
     pub fn backward_all(&mut self, id: TensorId) {
         let shape = &self.get(id).shape;
-        self.grads.insert(id, Tensor::zeros(&shape));
+        self.grads.insert(id, Tensor::ones(&shape));
 
         for t in self.topology(id) {
             self.backward(t);
@@ -473,6 +493,13 @@ impl Graph {
             .map(|id| self.tensors.get(id).expect("Tensor not found!"))
             .collect::<Vec<_>>();
         let child = self.alloc(f.run(&tensors));
+        self.computations.insert(
+            child,
+            Computation {
+                func: f,
+                inps: tensor_ids.to_vec(),
+            },
+        );
         for parent in tensor_ids {
             self.parents.entry(child).or_default().insert(*parent);
         }
@@ -484,13 +511,11 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    // 1
-    //   > 2     > 4
-    // 0     > 3
-    let t0 = g.alloc(Tensor::rand(&mut rng, &[3, 4, 5]));
-    let t1 = g.alloc(Tensor::rand(&mut rng, &[3, 4, 5]));
-    let t2 = g.call(Add::new(), &[t0, t1]);
-    let t3 = g.call(Add::new(), &[t0, t2]);
-    let t4 = g.call(Add::new(), &[t3, t2]);
+    let t0 = g.alloc(Tensor::rand(&mut rng, &[2, 1]));
+    let t1 = g.alloc(Tensor::rand(&mut rng, &[2, 1]));
+    let t2 = g.call(Add::new(), &[t0, t0]);
+    let t3 = g.call(Add::new(), &[t2, t0]);
+    let t4 = g.call(Add::new(), &[t3, t1]);
     g.backward_all(t4);
+    println!("{:?}", g.grads);
 }
