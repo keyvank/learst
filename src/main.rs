@@ -203,6 +203,28 @@ pub trait TensorOps: Sized {
         v.zoom(ind);
         v
     }
+
+    fn transpose(&self) -> Tensor {
+        let dim = self.dim();
+        let mut shape = self.shape().to_vec();
+        let temp = shape[dim - 2];
+        shape[dim - 2] = shape[dim - 1];
+        shape[dim - 1] = temp;
+        let mut t = Tensor::zeros(&shape);
+        for (mut dst, src) in t
+            .reshape_mut(&[0, shape[dim - 2], shape[dim - 1]])
+            .iter_mut()
+            .zip(self.reshape(&[0, shape[dim - 1], shape[dim - 2]]).iter())
+        {
+            for i in 0..shape[dim - 2] {
+                for j in 0..shape[dim - 1] {
+                    let d = src.get(j).get(i).scalar();
+                    dst.get_mut(i).get_mut(j).set_scalar(d);
+                }
+            }
+        }
+        t
+    }
 }
 
 impl TensorMutOps for Tensor {
@@ -325,6 +347,9 @@ fn apply<Op: Operation>(a: &Tensor, b: &Tensor) -> Tensor {
             }
         }
         Op::apply(&[av, bv], &mut rv);
+        if curr.len() == 0 {
+            break;
+        }
         curr[0] += 1;
         for i in 0..curr.len() {
             if curr[i] == shape[i] {
@@ -451,7 +476,13 @@ impl Loss for L2Loss {
 
 pub trait Function {
     fn run(&self, inps: &[&Tensor]) -> Tensor;
-    fn grad(&self, grads: &mut HashMap<TensorId, Tensor>, inps: &[TensorId], out: TensorId);
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor>,
+        tensors: &mut HashMap<TensorId, Tensor>,
+        inps: &[TensorId],
+        out: TensorId,
+    );
 }
 
 pub struct Add;
@@ -463,12 +494,18 @@ impl Add {
 impl Function for Add {
     fn run(&self, inps: &[&Tensor]) -> Tensor {
         assert_eq!(inps.len(), 2);
-        Tensor::add(inps[0], inps[1])
+        apply::<AddOp>(inps[0], inps[1])
     }
-    fn grad(&self, grads: &mut HashMap<TensorId, Tensor>, inps: &[TensorId], out: TensorId) {
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor>,
+        tensors: &mut HashMap<TensorId, Tensor>,
+        inps: &[TensorId],
+        out: TensorId,
+    ) {
         assert_eq!(inps.len(), 2);
-        grads.insert(inps[0], Tensor::add(&grads[&inps[0]], &grads[&out]));
-        grads.insert(inps[1], Tensor::add(&grads[&inps[1]], &grads[&out]));
+        grads.insert(inps[0], apply::<AddOp>(&grads[&inps[0]], &grads[&out]));
+        grads.insert(inps[1], apply::<AddOp>(&grads[&inps[1]], &grads[&out]));
     }
 }
 
@@ -483,10 +520,22 @@ impl Function for Mul {
         assert_eq!(inps.len(), 2);
         apply::<MatMulOp>(inps[0], inps[1])
     }
-    fn grad(&self, grads: &mut HashMap<TensorId, Tensor>, inps: &[TensorId], out: TensorId) {
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor>,
+        tensors: &mut HashMap<TensorId, Tensor>,
+        inps: &[TensorId],
+        out: TensorId,
+    ) {
         assert_eq!(inps.len(), 2);
-        //grads.insert(inps[0], Tensor::add(&grads[&inps[0]], &grads[&out]));
-        //grads.insert(inps[1], Tensor::add(&grads[&inps[1]], &grads[&out]));
+        grads.insert(
+            inps[0],
+            apply::<MatMulOp>(&grads[&out], &tensors[&inps[1]].transpose()),
+        );
+        grads.insert(
+            inps[1],
+            apply::<MatMulOp>(&tensors[&inps[0]].transpose(), &grads[&out]),
+        );
     }
 }
 
@@ -549,7 +598,8 @@ impl Graph {
                 let shape = self.get(*inp).shape.clone();
                 self.grads.entry(*inp).or_insert(Tensor::zeros(&shape));
             }
-            comp.func.grad(&mut self.grads, &comp.inps, id);
+            comp.func
+                .grad(&mut self.grads, &mut self.tensors, &comp.inps, id);
         }
     }
     pub fn backward_all(&mut self, id: TensorId) {
@@ -608,6 +658,7 @@ impl Operation for MatMulOp {
         2
     }
     fn output_shape(inp_shapes: &[&[usize]]) -> Vec<usize> {
+        println!("{:?}", inp_shapes);
         assert_eq!(inp_shapes.len(), 2);
         assert_eq!(inp_shapes[0].len(), 2);
         assert_eq!(inp_shapes[1].len(), 2);
@@ -628,24 +679,12 @@ impl Operation for MatMulOp {
 }
 
 fn main() {
-    let out_mul = apply::<MatMulOp>(
-        &Tensor::zeros(&[3, 5, 4, 5, 6]),
-        &Tensor::zeros(&[5, 4, 6, 7]),
-    );
-    println!("{:?}", out_mul.shape());
-
-    let out_add = apply::<AddOp>(
-        &Tensor::zeros(&[3, 1, 4, 5, 6, 9]),
-        &Tensor::zeros(&[2, 4, 5, 1, 9]),
-    );
-    println!("{:?}", out_add.shape());
-
-    /*let mut rng = thread_rng();
+    let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let t0 = g.alloc(Tensor::rand(&mut rng, &[10, 3, 4]));
-    let t1 = g.alloc(Tensor::rand(&mut rng, &[3, 4]));
-    let t2 = g.call(Add::new(), &[t0, t1]);
+    let t0 = g.alloc(Tensor::rand(&mut rng, &[3, 4]));
+    let t1 = g.alloc(Tensor::rand(&mut rng, &[4, 5]));
+    let t2 = g.call(Mul::new(), &[t0, t1]);
     g.backward_all(t2);
-    println!("{:?}", g.get(t2).shape());*/
+    println!("{:?}", g.grads.get(&t1));
 }
