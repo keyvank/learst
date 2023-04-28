@@ -322,13 +322,13 @@ fn combine_shapes(a: &[usize], b: &[usize], op_dim: usize) -> Vec<usize> {
     shape
 }
 
-fn apply<Op: Operation>(a: &Tensor, b: &Tensor) -> Tensor {
-    let shape = combine_shapes(a.shape(), b.shape(), Op::input_dim());
+fn apply<Op: Operation>(op: Op, a: &Tensor, b: &Tensor) -> Tensor {
+    let shape = combine_shapes(a.shape(), b.shape(), op.input_dim());
 
     let mut result_shape = shape.clone();
-    let op_lhs_shape = a.shape()[a.shape().len() - Op::input_dim()..].to_vec();
-    let op_rhs_shape = b.shape()[b.shape().len() - Op::input_dim()..].to_vec();
-    result_shape.extend(Op::output_shape(&[&op_lhs_shape, &op_rhs_shape]));
+    let op_lhs_shape = a.shape()[a.shape().len() - op.input_dim()..].to_vec();
+    let op_rhs_shape = b.shape()[b.shape().len() - op.input_dim()..].to_vec();
+    result_shape.extend(op.output_shape(&[&op_lhs_shape, &op_rhs_shape]));
     let mut result = Tensor::zeros(&result_shape);
 
     let mut curr = vec![0; shape.len()];
@@ -339,14 +339,14 @@ fn apply<Op: Operation>(a: &Tensor, b: &Tensor) -> Tensor {
         let mut bv = b.view();
         for (i, d) in curr.iter().enumerate() {
             rv.zoom(*d);
-            if i >= shape.len() + Op::input_dim() - a.shape.len() {
+            if i >= shape.len() + op.input_dim() - a.shape.len() {
                 av.zoom(if av.shape()[0] == 1 { 0 } else { *d });
             }
-            if i >= shape.len() + Op::input_dim() - b.shape.len() {
+            if i >= shape.len() + op.input_dim() - b.shape.len() {
                 bv.zoom(if bv.shape()[0] == 1 { 0 } else { *d });
             }
         }
-        Op::apply(&[av, bv], &mut rv);
+        op.apply(&[av, bv], &mut rv);
         if curr.len() == 0 {
             break;
         }
@@ -366,6 +366,44 @@ fn apply<Op: Operation>(a: &Tensor, b: &Tensor) -> Tensor {
 }
 
 impl Tensor {
+    pub fn raw(shape: &[usize], blob: Vec<f32>) -> Self {
+        Self {
+            blob,
+            shape: shape.to_vec(),
+        }
+    }
+    pub fn map<F: Fn(f32) -> f32>(&self, f: F) -> Self {
+        Self {
+            blob: self.blob().iter().map(|v| f(*v)).collect(),
+            shape: self.shape().to_vec(),
+        }
+    }
+    pub fn fill_by<F: Fn(&[usize]) -> f32>(shape: &[usize], f: F) -> Tensor {
+        let mut curr = vec![0; shape.len()];
+        let mut blob = Vec::new();
+        let mut finished = false;
+        while !finished {
+            blob.push(f(&curr));
+            if curr.len() == 0 {
+                break;
+            }
+            curr[shape.len() - 1] += 1;
+            for i in (0..curr.len()).rev() {
+                if curr[i] == shape[i] {
+                    if i == 0 {
+                        finished = true;
+                        break;
+                    }
+                    curr[i] = 0;
+                    curr[i - 1] += 1;
+                }
+            }
+        }
+        Tensor {
+            blob,
+            shape: shape.to_vec(),
+        }
+    }
     pub fn iden(n: usize) -> Self {
         Tensor {
             blob: (0..n * n)
@@ -494,7 +532,7 @@ impl Add {
 impl Function for Add {
     fn run(&self, inps: &[&Tensor]) -> Tensor {
         assert_eq!(inps.len(), 2);
-        apply::<AddOp>(inps[0], inps[1])
+        apply(AddOp {}, inps[0], inps[1])
     }
     fn grad(
         &self,
@@ -504,21 +542,21 @@ impl Function for Add {
         out: TensorId,
     ) {
         assert_eq!(inps.len(), 2);
-        grads.insert(inps[0], apply::<AddOp>(&grads[&inps[0]], &grads[&out]));
-        grads.insert(inps[1], apply::<AddOp>(&grads[&inps[1]], &grads[&out]));
+        grads.insert(inps[0], apply(AddOp {}, &grads[&inps[0]], &grads[&out]));
+        grads.insert(inps[1], apply(AddOp {}, &grads[&inps[1]], &grads[&out]));
     }
 }
 
-pub struct Mul;
-impl Mul {
+pub struct MatMul;
+impl MatMul {
     pub fn new() -> Box<dyn Function> {
         Box::new(Self {})
     }
 }
-impl Function for Mul {
+impl Function for MatMul {
     fn run(&self, inps: &[&Tensor]) -> Tensor {
         assert_eq!(inps.len(), 2);
-        apply::<MatMulOp>(inps[0], inps[1])
+        apply(MatMulOp {}, inps[0], inps[1])
     }
     fn grad(
         &self,
@@ -530,11 +568,41 @@ impl Function for Mul {
         assert_eq!(inps.len(), 2);
         grads.insert(
             inps[0],
-            apply::<MatMulOp>(&grads[&out], &tensors[&inps[1]].transpose()),
+            apply(MatMulOp {}, &grads[&out], &tensors[&inps[1]].transpose()),
         );
         grads.insert(
             inps[1],
-            apply::<MatMulOp>(&tensors[&inps[0]].transpose(), &grads[&out]),
+            apply(MatMulOp {}, &tensors[&inps[0]].transpose(), &grads[&out]),
+        );
+    }
+}
+
+pub struct Pow(f32);
+impl Pow {
+    pub fn new(p: f32) -> Box<dyn Function> {
+        Box::new(Self(p))
+    }
+}
+impl Function for Pow {
+    fn run(&self, inps: &[&Tensor]) -> Tensor {
+        assert_eq!(inps.len(), 1);
+        inps[0].map(|f| f.powf(self.0))
+    }
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor>,
+        tensors: &mut HashMap<TensorId, Tensor>,
+        inps: &[TensorId],
+        out: TensorId,
+    ) {
+        assert_eq!(inps.len(), 1);
+        grads.insert(
+            inps[0],
+            apply(
+                MulOp {},
+                &apply(MatMulOp {}, &tensors[&inps[0]].transpose(), &grads[&out]),
+                &Tensor::scalar(self.0),
+            ),
         );
     }
 }
@@ -610,6 +678,11 @@ impl Graph {
             self.backward(t);
         }
     }
+    pub fn forward(&mut self, id: TensorId) {
+        for t in self.topology(id).iter().rev() {
+            self.backward(t);
+        }
+    }
     pub fn call(&mut self, f: Box<dyn Function>, tensor_ids: &[TensorId]) -> TensorId {
         let tensors = tensor_ids
             .iter()
@@ -631,33 +704,64 @@ impl Graph {
 }
 
 trait Operation {
-    fn input_dim() -> usize;
-    fn output_shape(inp_shapes: &[&[usize]]) -> Vec<usize>;
-    fn apply(inps: &[TensorView], out: &mut TensorMutView);
+    fn input_dim(&self) -> usize;
+    fn output_shape(&self, inp_shapes: &[&[usize]]) -> Vec<usize>;
+    fn apply(&self, inps: &[TensorView], out: &mut TensorMutView);
+}
+
+struct PowOp(f32);
+impl Operation for PowOp {
+    fn input_dim(&self) -> usize {
+        0
+    }
+    fn output_shape(&self, inp_shapes: &[&[usize]]) -> Vec<usize> {
+        assert_eq!(inp_shapes.len(), 1);
+        assert_eq!(inp_shapes[0].len(), 0);
+        vec![]
+    }
+    fn apply(&self, inps: &[TensorView], out: &mut TensorMutView) {
+        out.set_scalar(inps[0].scalar().powf(self.0));
+    }
 }
 
 struct AddOp;
 impl Operation for AddOp {
-    fn input_dim() -> usize {
+    fn input_dim(&self) -> usize {
         0
     }
-    fn output_shape(inp_shapes: &[&[usize]]) -> Vec<usize> {
+    fn output_shape(&self, inp_shapes: &[&[usize]]) -> Vec<usize> {
         assert_eq!(inp_shapes.len(), 2);
         assert_eq!(inp_shapes[0].len(), 0);
         assert_eq!(inp_shapes[1].len(), 0);
         vec![]
     }
-    fn apply(inps: &[TensorView], out: &mut TensorMutView) {
+    fn apply(&self, inps: &[TensorView], out: &mut TensorMutView) {
         out.set_scalar(inps[0].scalar() + inps[1].scalar());
+    }
+}
+
+struct MulOp;
+impl Operation for MulOp {
+    fn input_dim(&self) -> usize {
+        0
+    }
+    fn output_shape(&self, inp_shapes: &[&[usize]]) -> Vec<usize> {
+        assert_eq!(inp_shapes.len(), 2);
+        assert_eq!(inp_shapes[0].len(), 0);
+        assert_eq!(inp_shapes[1].len(), 0);
+        vec![]
+    }
+    fn apply(&self, inps: &[TensorView], out: &mut TensorMutView) {
+        out.set_scalar(inps[0].scalar() * inps[1].scalar());
     }
 }
 
 struct MatMulOp;
 impl Operation for MatMulOp {
-    fn input_dim() -> usize {
+    fn input_dim(&self) -> usize {
         2
     }
-    fn output_shape(inp_shapes: &[&[usize]]) -> Vec<usize> {
+    fn output_shape(&self, inp_shapes: &[&[usize]]) -> Vec<usize> {
         println!("{:?}", inp_shapes);
         assert_eq!(inp_shapes.len(), 2);
         assert_eq!(inp_shapes[0].len(), 2);
@@ -665,7 +769,7 @@ impl Operation for MatMulOp {
         assert_eq!(inp_shapes[0][1], inp_shapes[1][0]);
         vec![inp_shapes[0][0], inp_shapes[1][1]]
     }
-    fn apply(inps: &[TensorView], out: &mut TensorMutView) {
+    fn apply(&self, inps: &[TensorView], out: &mut TensorMutView) {
         for i in 0..out.shape()[0] {
             for j in 0..out.shape()[1] {
                 let mut sum = 0.;
@@ -682,9 +786,33 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let t0 = g.alloc(Tensor::rand(&mut rng, &[3, 4]));
-    let t1 = g.alloc(Tensor::rand(&mut rng, &[4, 5]));
-    let t2 = g.call(Mul::new(), &[t0, t1]);
-    g.backward_all(t2);
-    println!("{:?}", g.grads.get(&t1));
+    let samples = Tensor::fill_by(&[20, 2], |pos| (pos[0] + pos[1]) as f32);
+
+    let t0 = g.alloc(samples);
+    let t1 = g.alloc(Tensor::rand(&mut rng, &[2, 1]));
+    let neg_expected = g.alloc(Tensor::fill_by(&[20, 1], |pos| {
+        -((pos[0] * 3 + (pos[0] + 1) * 4) as f32)
+    }));
+    for i in 0..100 {
+        let t2 = g.call(MatMul::new(), &[t0, t1]);
+        let t3 = g.call(Add::new(), &[t2, neg_expected]);
+        let t4 = g.call(Pow::new(2.), &[t3]);
+        g.zero_grad();
+        g.backward_all(t4);
+        println!("{:?}", g.grads.get(&t1));
+        let new_t1 = g.tensors.get_mut(&t1).unwrap();
+        *new_t1 = apply(
+            AddOp {},
+            new_t1,
+            &apply(
+                MulOp {},
+                g.grads.get(&t1).unwrap(),
+                &Tensor::scalar(-0.0001),
+            ),
+        );
+    }
+    //println!("{:?}", g.grads.get(&t3));
+    //println!("{:?}", g.grads.get(&neg_expected));
+    //println!("{:?}", g.grads.get(&t2));
+    //println!("{:?}", g.tensors.get(&t4));
 }
