@@ -153,6 +153,14 @@ pub trait TensorOps: Sized {
     fn blob(&self) -> &[f32];
     fn tensor(&self) -> &Tensor;
     fn offset(&self) -> usize;
+
+    fn map<F: Fn(f32) -> f32>(&self, f: F) -> Tensor {
+        Tensor {
+            blob: self.blob().iter().map(|v| f(*v)).collect(),
+            shape: self.shape().to_vec(),
+        }
+    }
+
     fn sum(&self) -> f32 {
         self.blob().iter().sum()
     }
@@ -301,12 +309,6 @@ impl Tensor {
         Self {
             blob,
             shape: shape.to_vec(),
-        }
-    }
-    pub fn map<F: Fn(f32) -> f32>(&self, f: F) -> Self {
-        Self {
-            blob: self.blob().iter().map(|v| f(*v)).collect(),
-            shape: self.shape().to_vec(),
         }
     }
     pub fn fill_by<F: Fn(&[usize]) -> f32>(shape: &[usize], f: F) -> Tensor {
