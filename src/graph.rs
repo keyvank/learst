@@ -1,3 +1,4 @@
+use crate::optimizer::Optimizer;
 use crate::tensor::*;
 use crate::Function;
 use std::collections::{HashMap, HashSet};
@@ -106,5 +107,19 @@ impl Graph {
             self.parents.entry(child).or_default().insert(*parent);
         }
         child
+    }
+    pub fn optimize(&mut self, opt: &mut Box<dyn Optimizer>, params: &HashSet<TensorId>) {
+        let (params, grads): (Vec<&mut Tensor>, Vec<&Tensor>) = self
+            .tensors
+            .iter_mut()
+            .filter(|(id, _)| params.contains(id))
+            .map(|(id, params)| {
+                let grad = self.grads.get(id).expect("Tensor not found!");
+                (params, grad)
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .unzip();
+        opt.step(params, grads);
     }
 }

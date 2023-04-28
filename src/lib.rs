@@ -259,7 +259,6 @@ impl Operation for MatMulOp {
         2
     }
     fn output_shape(&self, inp_shapes: &[&[usize]]) -> Vec<usize> {
-        println!("{:?}", inp_shapes);
         assert_eq!(inp_shapes.len(), 2);
         assert_eq!(inp_shapes[0].len(), 2);
         assert_eq!(inp_shapes[1].len(), 2);
