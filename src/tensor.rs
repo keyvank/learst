@@ -1,20 +1,33 @@
 use rand::prelude::*;
 use std::ops::*;
 
+pub trait TensorElement: Clone + Copy + Sized {
+    fn zero() -> Self;
+    fn one() -> Self;
+}
+impl TensorElement for f32 {
+    fn zero() -> Self {
+        0.
+    }
+    fn one() -> Self {
+        1.
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct Tensor<V> {
+pub struct Tensor<V: TensorElement> {
     blob: Vec<V>,
     shape: Vec<usize>,
 }
 
 #[derive(Debug)]
-pub struct TensorView<'a, V> {
+pub struct TensorView<'a, V: TensorElement> {
     mirror: &'a Tensor<V>,
     offset: usize,
     shape: Vec<usize>,
 }
 
-impl<'a, V> TensorView<'a, V> {
+impl<'a, V: TensorElement> TensorView<'a, V> {
     pub fn zoom(&mut self, ind: usize) {
         assert!(ind < self.shape[0]);
         let sub_size = self.size() / self.len();
@@ -23,7 +36,7 @@ impl<'a, V> TensorView<'a, V> {
     }
 }
 
-impl<'a, V> TensorMutView<'a, V> {
+impl<'a, V: TensorElement> TensorMutView<'a, V> {
     pub fn zoom(&mut self, ind: usize) {
         assert!(ind < self.shape[0]);
         let sub_size = self.size() / self.len();
@@ -33,19 +46,19 @@ impl<'a, V> TensorMutView<'a, V> {
 }
 
 #[derive(Debug)]
-pub struct TensorMutView<'a, V> {
+pub struct TensorMutView<'a, V: TensorElement> {
     mirror: &'a mut Tensor<V>,
     offset: usize,
     shape: Vec<usize>,
 }
 
-pub struct TensorIter<'a, V, T: TensorOps<V>> {
+pub struct TensorIter<'a, V: TensorElement, T: TensorOps<V>> {
     target: &'a T,
     index: usize,
     _value_type: std::marker::PhantomData<V>,
 }
-impl<'a, V, T: TensorOps<V>> Iterator for TensorIter<'a, V, T> {
-    type Item = TensorView<'a, T>;
+impl<'a, V: 'a + TensorElement, T: TensorOps<V>> Iterator for TensorIter<'a, V, T> {
+    type Item = TensorView<'a, V>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let ret = if self.index < self.target.len() {
@@ -58,12 +71,12 @@ impl<'a, V, T: TensorOps<V>> Iterator for TensorIter<'a, V, T> {
     }
 }
 
-pub struct TensorIterMut<'a, V, T: TensorMutOps<V>> {
+pub struct TensorIterMut<'a, V: TensorElement, T: TensorMutOps<V>> {
     target: &'a mut T,
     index: usize,
     _value_type: std::marker::PhantomData<V>,
 }
-impl<'a, V: 'a, T: TensorMutOps<V>> Iterator for TensorIterMut<'a, V, T> {
+impl<'a, V: 'a + TensorElement, T: TensorMutOps<V>> Iterator for TensorIterMut<'a, V, T> {
     type Item = TensorMutView<'a, V>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -71,7 +84,7 @@ impl<'a, V: 'a, T: TensorMutOps<V>> Iterator for TensorIterMut<'a, V, T> {
             unsafe {
                 let t = self.target.get_mut(self.index);
                 Some(TensorMutView {
-                    mirror: &mut *(t.mirror as *mut Tensor),
+                    mirror: &mut *(t.mirror as *mut Tensor<V>),
                     offset: t.offset,
                     shape: t.shape,
                 })
@@ -84,7 +97,7 @@ impl<'a, V: 'a, T: TensorMutOps<V>> Iterator for TensorIterMut<'a, V, T> {
     }
 }
 
-pub trait TensorMutOps<V>: TensorOps<V> {
+pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn blob_mut(&mut self) -> &mut [V];
     fn tensor_mut(&mut self) -> &mut Tensor<V>;
 
@@ -141,7 +154,7 @@ pub fn reshape(size: usize, shape: &[usize]) -> Vec<usize> {
     final_shape
 }
 
-pub trait TensorOps<V>: Sized {
+pub trait TensorOps<V: TensorElement>: Sized {
     fn shape(&self) -> &[usize];
     fn blob(&self) -> &[V];
     fn tensor(&self) -> &Tensor<V>;
@@ -152,10 +165,6 @@ pub trait TensorOps<V>: Sized {
             blob: self.blob().iter().map(|v| f(*v)).collect(),
             shape: self.shape().to_vec(),
         }
-    }
-
-    fn sum(&self) -> V {
-        self.blob().iter().sum()
     }
 
     fn scalar(&self) -> V {
@@ -231,7 +240,7 @@ pub trait TensorOps<V>: Sized {
     }
 }
 
-impl<V> TensorMutOps<V> for Tensor<V> {
+impl<V: TensorElement> TensorMutOps<V> for Tensor<V> {
     fn tensor_mut(&mut self) -> &mut Tensor<V> {
         self
     }
@@ -240,7 +249,7 @@ impl<V> TensorMutOps<V> for Tensor<V> {
     }
 }
 
-impl<V> TensorOps<V> for Tensor<V> {
+impl<V: TensorElement> TensorOps<V> for Tensor<V> {
     fn tensor(&self) -> &Tensor<V> {
         self
     }
@@ -256,7 +265,7 @@ impl<V> TensorOps<V> for Tensor<V> {
     }
 }
 
-impl<V> TensorMutOps<V> for TensorMutView<'_, V> {
+impl<V: TensorElement> TensorMutOps<V> for TensorMutView<'_, V> {
     fn tensor_mut(&mut self) -> &mut Tensor<V> {
         &mut self.mirror
     }
@@ -266,7 +275,7 @@ impl<V> TensorMutOps<V> for TensorMutView<'_, V> {
     }
 }
 
-impl<V> TensorOps<V> for TensorMutView<'_, V> {
+impl<V: TensorElement> TensorOps<V> for TensorMutView<'_, V> {
     fn tensor(&self) -> &Tensor<V> {
         &self.mirror
     }
@@ -282,7 +291,7 @@ impl<V> TensorOps<V> for TensorMutView<'_, V> {
     }
 }
 
-impl<V> TensorOps<V> for TensorView<'_, V> {
+impl<V: TensorElement> TensorOps<V> for TensorView<'_, V> {
     fn tensor(&self) -> &Tensor<V> {
         &self.mirror
     }
@@ -297,7 +306,7 @@ impl<V> TensorOps<V> for TensorView<'_, V> {
     }
 }
 
-impl<V> Tensor<V> {
+impl<V: TensorElement> Tensor<V> {
     pub fn raw(shape: &[usize], blob: Vec<V>) -> Self {
         Self {
             blob,
@@ -333,7 +342,7 @@ impl<V> Tensor<V> {
     pub fn iden(n: usize) -> Self {
         Tensor {
             blob: (0..n * n)
-                .map(|i| if i / n == i % n { 1. } else { 0. })
+                .map(|i| if i / n == i % n { V::one() } else { V::zero() })
                 .collect(),
             shape: vec![n, n],
         }
@@ -351,15 +360,15 @@ impl<V> Tensor<V> {
         }
     }
     pub fn zeros(shape: &[usize]) -> Self {
-        Self::constant(shape, 0.)
+        Self::constant(shape, V::zero())
     }
     pub fn ones(shape: &[usize]) -> Self {
-        Self::constant(shape, 1.)
+        Self::constant(shape, V::one())
     }
-    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Self {
-        Tensor {
+    pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Tensor<f32> {
+        Tensor::<f32> {
             blob: (0..shape.iter().fold(1, |curr, s| curr * s))
-                .map(|_| r.gen::<V>())
+                .map(|_| r.gen::<f32>() * 2. - 1.)
                 .collect(),
             shape: shape.to_vec(),
         }
@@ -423,25 +432,25 @@ pub fn binary<F: FnMut(&[usize], &[usize], &[usize]) -> ()>(a: &[usize], b: &[us
     }
 }
 
-impl<V: std::ops::Add> Add for &Tensor<V> {
+impl<V: TensorElement + std::ops::Add<Output = V>> Add for &Tensor<V> {
     type Output = Tensor<V>;
     fn add(self, other: &Tensor<V>) -> Self::Output {
         &self.view() + &other.view()
     }
 }
-impl<'a, V: std::ops::Add> Add<&TensorView<'a, V>> for &Tensor<V> {
+impl<'a, V: TensorElement + std::ops::Add<Output = V>> Add<&TensorView<'a, V>> for &Tensor<V> {
     type Output = Tensor<V>;
     fn add(self, other: &TensorView<'a, V>) -> Self::Output {
         &self.view() + other
     }
 }
-impl<'a, V: std::ops::Add> Add<&Tensor<V>> for &TensorView<'a, V> {
+impl<'a, V: TensorElement + std::ops::Add<Output = V>> Add<&Tensor<V>> for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn add(self, other: &Tensor<V>) -> Self::Output {
         self + &other.view()
     }
 }
-impl<'a, V: std::ops::Add> Add for &TensorView<'a, V> {
+impl<'a, V: TensorElement + std::ops::Add<Output = V>> Add for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn add(self, other: &TensorView<V>) -> Self::Output {
         let shape = combine_shapes(self.shape(), other.shape());
@@ -464,25 +473,25 @@ impl<'a, V: std::ops::Add> Add for &TensorView<'a, V> {
         result
     }
 }
-impl<V: std::ops::Mul> Mul for &Tensor<V> {
+impl<V: TensorElement + std::ops::Mul<Output = V>> Mul for &Tensor<V> {
     type Output = Tensor<V>;
     fn mul(self, other: &Tensor<V>) -> Self::Output {
         &self.view() * &other.view()
     }
 }
-impl<'a, V: std::ops::Mul> Mul<&TensorView<'a, V>> for &Tensor<V> {
+impl<'a, V: TensorElement + std::ops::Mul<Output = V>> Mul<&TensorView<'a, V>> for &Tensor<V> {
     type Output = Tensor<V>;
     fn mul(self, other: &TensorView<'a, V>) -> Self::Output {
         &self.view() * other
     }
 }
-impl<'a, V: std::ops::Mul> Mul<&Tensor<V>> for &TensorView<'a, V> {
+impl<'a, V: TensorElement + std::ops::Mul<Output = V>> Mul<&Tensor<V>> for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn mul(self, other: &Tensor<V>) -> Self::Output {
         self * &other.view()
     }
 }
-impl<'a, V: std::ops::Mul> Mul for &TensorView<'a, V> {
+impl<'a, V: TensorElement + std::ops::Mul<Output = V>> Mul for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn mul(self, other: &TensorView<V>) -> Self::Output {
         let shape = combine_shapes(self.shape(), other.shape());
@@ -505,25 +514,33 @@ impl<'a, V: std::ops::Mul> Mul for &TensorView<'a, V> {
         result
     }
 }
-impl<V: std::ops::Mul + std::ops::Add + Default> BitXor for &Tensor<V> {
+impl<V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>> BitXor
+    for &Tensor<V>
+{
     type Output = Tensor<V>;
     fn bitxor(self, other: &Tensor<V>) -> Self::Output {
         &self.view() ^ &other.view()
     }
 }
-impl<'a, V: std::ops::Mul + std::ops::Add + Default> BitXor<&TensorView<'a, V>> for &Tensor<V> {
+impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>>
+    BitXor<&TensorView<'a, V>> for &Tensor<V>
+{
     type Output = Tensor<V>;
     fn bitxor(self, other: &TensorView<'a, V>) -> Self::Output {
         &self.view() ^ other
     }
 }
-impl<'a, V: std::ops::Mul + std::ops::Add + Default> BitXor<&Tensor<V>> for &TensorView<'a, V> {
+impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>>
+    BitXor<&Tensor<V>> for &TensorView<'a, V>
+{
     type Output = Tensor<V>;
     fn bitxor(self, other: &Tensor<V>) -> Self::Output {
         self ^ &other.view()
     }
 }
-impl<'a, V: std::ops::Mul + std::ops::Add + Default> BitXor for &TensorView<'a, V> {
+impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V>> BitXor
+    for &TensorView<'a, V>
+{
     type Output = Tensor<V>;
     fn bitxor(self, other: &TensorView<V>) -> Self::Output {
         let mat1_shape = self.shape()[self.dim() - 2..].to_vec();
@@ -549,7 +566,9 @@ impl<'a, V: std::ops::Mul + std::ops::Add + Default> BitXor for &TensorView<'a, 
             }
             for i in 0..r.shape()[0] {
                 for j in 0..r.shape()[1] {
-                    let mut sum = Tensor::scalar(V::default());
+                    let mut sum = Tensor::scalar(
+                        <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero(),
+                    );
                     for k in 0..a.shape()[1] {
                         sum = &sum + &(&a.get(i).get(k) * &b.get(k).get(j));
                     }

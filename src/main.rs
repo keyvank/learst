@@ -11,9 +11,9 @@ fn main() {
     let samples = Tensor::fill_by(&[20, 100], |pos| (pos[0] + pos[1]) as f32);
 
     let inp = g.alloc(samples);
-    let lin1 = g.alloc(Tensor::rand(&mut rng, &[100, 50]));
-    let lin2 = g.alloc(Tensor::rand(&mut rng, &[50, 20]));
-    let lin3 = g.alloc(Tensor::rand(&mut rng, &[20, 10]));
+    let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[100, 50]));
+    let lin2 = g.alloc(Tensor::<f32>::rand(&mut rng, &[50, 20]));
+    let lin3 = g.alloc(Tensor::<f32>::rand(&mut rng, &[20, 10]));
 
     let post_lin1 = g.call(MatMul::new(), &[inp, lin1]);
     let post_sigm1 = g.call(Sigmoid::new(), &[post_lin1]);
