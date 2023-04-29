@@ -114,3 +114,27 @@ impl Function for Mul {
         grads.insert(inps[0], &grads[&out] * &Tensor::scalar(self.0));
     }
 }
+
+pub struct Sigmoid;
+impl Sigmoid {
+    pub fn new() -> Box<dyn Function> {
+        Box::new(Self {})
+    }
+}
+impl Function for Sigmoid {
+    fn run(&self, inps: &[&Tensor]) -> Tensor {
+        assert_eq!(inps.len(), 1);
+        inps[0].map(|f| 1. / (1. + (-f).exp()))
+    }
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor>,
+        tensors: &mut HashMap<TensorId, Tensor>,
+        inps: &[TensorId],
+        out: TensorId,
+    ) {
+        assert_eq!(inps.len(), 1);
+        let der = tensors[&out].map(|f| f * (1. - f));
+        grads.insert(inps[0], &der * &grads[&out]);
+    }
+}

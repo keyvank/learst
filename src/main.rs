@@ -1,6 +1,6 @@
 use learst::graph::Graph;
 use learst::optimizer::NaiveOptimizer;
-use learst::tensor::Tensor;
+use learst::tensor::{Tensor, TensorOps};
 use learst::*;
 use rand::prelude::*;
 
@@ -8,15 +8,25 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let samples = Tensor::fill_by(&[20, 2], |pos| (pos[0] + pos[1]) as f32);
+    let samples = Tensor::fill_by(&[20, 100], |pos| (pos[0] + pos[1]) as f32);
 
-    let t0 = g.alloc(samples);
-    let t1 = g.alloc(Tensor::rand(&mut rng, &[2, 1]));
-    let neg_expected = g.alloc(Tensor::fill_by(&[20, 1], |pos| {
-        -((pos[0] * 1 + (pos[0] + 1) * 19) as f32)
-    }));
-    let t2 = g.call(MatMul::new(), &[t0, t1]);
-    let t3 = g.call(Add::new(), &[t2, neg_expected]);
+    let inp = g.alloc(samples);
+    let lin1 = g.alloc(Tensor::rand(&mut rng, &[100, 50]));
+    let lin2 = g.alloc(Tensor::rand(&mut rng, &[50, 20]));
+    let lin3 = g.alloc(Tensor::rand(&mut rng, &[20, 1]));
+
+    let post_lin1 = g.call(MatMul::new(), &[inp, lin1]);
+    let post_sigm1 = g.call(Sigmoid::new(), &[post_lin1]);
+
+    let post_lin2 = g.call(MatMul::new(), &[post_sigm1, lin2]);
+    let post_sigm2 = g.call(Sigmoid::new(), &[post_lin2]);
+
+    let post_lin3 = g.call(MatMul::new(), &[post_sigm2, lin3]);
+    let post_sigm3 = g.call(Sigmoid::new(), &[post_lin3]);
+
+    println!("{:?}", g.get(post_sigm3));
+
+    /*let t3 = g.call(Add::new(), &[t2, neg_expected]);
     let t4 = g.call(Pow::new(2.), &[t3]);
     let t5 = g.call(Mul::new(0.05), &[t4]);
     let mut opt = NaiveOptimizer::new(0.0001);
@@ -26,5 +36,5 @@ fn main() {
         g.backward_all(t5);
         g.optimize(&mut opt, &[t1].into_iter().collect());
     }
-    println!("{:?}", g.get(t1));
+    println!("{:?}", g.get(t1));*/
 }
