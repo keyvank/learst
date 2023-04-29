@@ -96,10 +96,6 @@ pub trait TensorMutOps: TensorOps {
     fn fill(&mut self, v: f32) {
         self.blob_mut().fill(v);
     }
-    fn copy<T: TensorOps>(&mut self, from: &T) {
-        assert_eq!(self.shape(), from.shape());
-        self.blob_mut().copy_from_slice(from.blob())
-    }
     fn set<T: TensorOps>(&mut self, t: T) {
         assert_eq!(self.shape(), t.shape());
         self.blob_mut().clone_from_slice(t.blob());

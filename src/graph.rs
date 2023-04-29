@@ -89,7 +89,7 @@ impl Graph {
             self.tensors
                 .get_mut(&c.out)
                 .expect("Tensor not found!")
-                .copy(&result);
+                .set(result);
         }
     }
     pub fn call(&mut self, f: Box<dyn Function>, tensor_ids: &[TensorId]) -> TensorId {
