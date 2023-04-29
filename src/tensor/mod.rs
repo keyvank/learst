@@ -15,6 +15,14 @@ impl TensorElement for f32 {
         1.
     }
 }
+impl TensorElement for u32 {
+    fn zero() -> Self {
+        0
+    }
+    fn one() -> Self {
+        1
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Tensor<V: TensorElement> {
