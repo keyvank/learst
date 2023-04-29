@@ -8,11 +8,11 @@ use tensor::*;
 use std::collections::HashMap;
 
 pub trait Function {
-    fn run(&self, inps: &[&Tensor]) -> Tensor;
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32>;
     fn grad(
         &self,
-        grads: &mut HashMap<TensorId, Tensor>,
-        tensors: &mut HashMap<TensorId, Tensor>,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &mut HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     );
@@ -25,14 +25,14 @@ impl Add {
     }
 }
 impl Function for Add {
-    fn run(&self, inps: &[&Tensor]) -> Tensor {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 2);
         inps[0] + inps[1]
     }
     fn grad(
         &self,
-        grads: &mut HashMap<TensorId, Tensor>,
-        _tensors: &mut HashMap<TensorId, Tensor>,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        _tensors: &mut HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -49,14 +49,14 @@ impl MatMul {
     }
 }
 impl Function for MatMul {
-    fn run(&self, inps: &[&Tensor]) -> Tensor {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 2);
         inps[0] ^ inps[1]
     }
     fn grad(
         &self,
-        grads: &mut HashMap<TensorId, Tensor>,
-        tensors: &mut HashMap<TensorId, Tensor>,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &mut HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -73,21 +73,21 @@ impl Pow {
     }
 }
 impl Function for Pow {
-    fn run(&self, inps: &[&Tensor]) -> Tensor {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map(|f| f.powf(self.0))
     }
     fn grad(
         &self,
-        grads: &mut HashMap<TensorId, Tensor>,
-        tensors: &mut HashMap<TensorId, Tensor>,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &mut HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
         assert_eq!(inps.len(), 1);
         grads.insert(
             inps[0],
-            &(&tensors[&inps[0]].transpose() ^ &grads[&out]) * &Tensor::scalar(self.0),
+            &(&tensors[&inps[0]].transpose() ^ &grads[&out]) * &Tensor::<f32>::scalar(self.0),
         );
     }
 }
@@ -99,19 +99,19 @@ impl Mul {
     }
 }
 impl Function for Mul {
-    fn run(&self, inps: &[&Tensor]) -> Tensor {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map(|f| f * self.0)
     }
     fn grad(
         &self,
-        grads: &mut HashMap<TensorId, Tensor>,
-        _tensors: &mut HashMap<TensorId, Tensor>,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        _tensors: &mut HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
         assert_eq!(inps.len(), 1);
-        grads.insert(inps[0], &grads[&out] * &Tensor::scalar(self.0));
+        grads.insert(inps[0], &grads[&out] * &Tensor::<f32>::scalar(self.0));
     }
 }
 
@@ -122,14 +122,14 @@ impl Sigmoid {
     }
 }
 impl Function for Sigmoid {
-    fn run(&self, inps: &[&Tensor]) -> Tensor {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map(|f| 1. / (1. + (-f).exp()))
     }
     fn grad(
         &self,
-        grads: &mut HashMap<TensorId, Tensor>,
-        tensors: &mut HashMap<TensorId, Tensor>,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &mut HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -146,7 +146,7 @@ impl Softmax {
     }
 }
 impl Function for Softmax {
-    fn run(&self, inps: &[&Tensor]) -> Tensor {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         let mut soft = inps[0].clone();
         for mut l in soft
@@ -155,15 +155,37 @@ impl Function for Softmax {
         {
             let sum = l.map(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
             for mut v in l.iter_mut() {
-                v.set(Tensor::scalar(v.scalar().exp() / sum));
+                v.set(Tensor::<f32>::scalar(v.scalar().exp() / sum));
             }
         }
         soft
     }
     fn grad(
         &self,
-        grads: &mut HashMap<TensorId, Tensor>,
-        tensors: &mut HashMap<TensorId, Tensor>,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        inps: &[TensorId],
+        out: TensorId,
+    ) {
+        unimplemented!();
+    }
+}
+
+pub struct CrossEntropy;
+impl CrossEntropy {
+    pub fn new() -> Box<dyn Function> {
+        Box::new(Self {})
+    }
+}
+impl Function for CrossEntropy {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+        assert_eq!(inps.len(), 1);
+        unimplemented!();
+    }
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &mut HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {

@@ -1,7 +1,7 @@
 use crate::tensor::Tensor;
 
 pub trait Optimizer {
-    fn step(&self, params: Vec<&mut Tensor>, grads: Vec<&Tensor>);
+    fn step(&self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>);
 }
 
 pub struct NaiveOptimizer {
@@ -15,7 +15,7 @@ impl NaiveOptimizer {
 }
 
 impl Optimizer for NaiveOptimizer {
-    fn step(&self, params: Vec<&mut Tensor>, grads: Vec<&Tensor>) {
+    fn step(&self, params: Vec<&mut Tensor<f32>>, grads: Vec<&Tensor<f32>>) {
         for (param, grad) in params.into_iter().zip(grads.into_iter()) {
             *param = &*param + &(grad * &Tensor::scalar(-self.learning_rate));
         }

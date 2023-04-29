@@ -12,9 +12,9 @@ struct Computation {
 }
 
 pub struct Graph {
-    pub grads: HashMap<TensorId, Tensor>,
+    pub grads: HashMap<TensorId, Tensor<f32>>,
     computations: Vec<Computation>,
-    tensors: HashMap<TensorId, Tensor>,
+    tensors: HashMap<TensorId, Tensor<f32>>,
     parents: HashMap<TensorId, HashSet<TensorId>>,
     next_tensor_id: TensorId,
 }
@@ -29,7 +29,7 @@ impl Graph {
             next_tensor_id: Default::default(),
         }
     }
-    pub fn alloc(&mut self, tensor: Tensor) -> TensorId {
+    pub fn alloc(&mut self, tensor: Tensor<f32>) -> TensorId {
         let id = self.next_tensor_id;
         self.tensors.insert(id, tensor);
         self.next_tensor_id += 1;
@@ -38,10 +38,10 @@ impl Graph {
     pub fn zero_grad(&mut self) {
         self.grads.clear();
     }
-    pub fn get(&self, id: TensorId) -> &Tensor {
+    pub fn get(&self, id: TensorId) -> &Tensor<f32> {
         self.tensors.get(&id).expect("Tensor not found!")
     }
-    pub fn get_mut(&mut self, id: TensorId) -> &mut Tensor {
+    pub fn get_mut(&mut self, id: TensorId) -> &mut Tensor<f32> {
         self.tensors.get_mut(&id).expect("Tensor not found!")
     }
     pub fn topology(&self, root: TensorId) -> Vec<TensorId> {
@@ -64,7 +64,9 @@ impl Graph {
         if let Some(comp) = self.computations.iter().find(|c| c.out == id) {
             for inp in comp.inps.iter() {
                 let shape = self.get(*inp).shape().to_vec();
-                self.grads.entry(*inp).or_insert(Tensor::zeros(&shape));
+                self.grads
+                    .entry(*inp)
+                    .or_insert(Tensor::<f32>::zeros(&shape));
             }
             comp.func
                 .grad(&mut self.grads, &mut self.tensors, &comp.inps, id);
@@ -72,7 +74,7 @@ impl Graph {
     }
     pub fn backward_all(&mut self, id: TensorId) {
         let shape = &self.get(id).shape();
-        self.grads.insert(id, Tensor::ones(&shape));
+        self.grads.insert(id, Tensor::<f32>::ones(&shape));
 
         for t in self.topology(id) {
             self.backward(t);
@@ -109,7 +111,7 @@ impl Graph {
         child
     }
     pub fn optimize(&mut self, opt: &mut Box<dyn Optimizer>, params: &HashSet<TensorId>) {
-        let (params, grads): (Vec<&mut Tensor>, Vec<&Tensor>) = self
+        let (params, grads): (Vec<&mut Tensor<f32>>, Vec<&Tensor<f32>>) = self
             .tensors
             .iter_mut()
             .filter(|(id, _)| params.contains(id))
