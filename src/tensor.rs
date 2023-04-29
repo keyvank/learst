@@ -366,12 +366,10 @@ impl Tensor {
     }
 }
 
-fn combine_shapes(a: &[usize], b: &[usize], op_dim: usize) -> Vec<usize> {
-    assert!(a.len() >= op_dim);
-    assert!(b.len() >= op_dim);
+fn combine_shapes(a: &[usize], b: &[usize]) -> Vec<usize> {
     let shape_len = std::cmp::max(a.len(), b.len());
     let mut shape = Vec::new();
-    for i in op_dim..shape_len {
+    for i in 0..shape_len {
         shape.insert(
             0,
             if i >= a.len() {
@@ -396,7 +394,7 @@ fn combine_shapes(a: &[usize], b: &[usize], op_dim: usize) -> Vec<usize> {
 }
 
 pub fn binary<F: FnMut(&[usize], &[usize], &[usize]) -> ()>(a: &[usize], b: &[usize], mut f: F) {
-    let shape = combine_shapes(a, b, 0);
+    let shape = combine_shapes(a, b);
     let mut curr = vec![0; shape.len()];
     fn calc_shape(pos: &[usize], shape: &[usize]) -> Vec<usize> {
         pos[pos.len() - shape.len()..]
@@ -446,7 +444,7 @@ impl<'a> Add<&Tensor> for &TensorView<'a> {
 impl<'a> Add for &TensorView<'a> {
     type Output = Tensor;
     fn add(self, other: &TensorView) -> Self::Output {
-        let shape = combine_shapes(self.shape(), other.shape(), 0);
+        let shape = combine_shapes(self.shape(), other.shape());
         let mut result = Tensor::zeros(&shape);
         binary(self.shape(), other.shape(), |r_pos, a_pos, b_pos| {
             let mut a = self.view();
@@ -487,7 +485,7 @@ impl<'a> Mul<&Tensor> for &TensorView<'a> {
 impl<'a> Mul for &TensorView<'a> {
     type Output = Tensor;
     fn mul(self, other: &TensorView) -> Self::Output {
-        let shape = combine_shapes(self.shape(), other.shape(), 0);
+        let shape = combine_shapes(self.shape(), other.shape());
         let mut result = Tensor::zeros(&shape);
         binary(self.shape(), other.shape(), |r_pos, a_pos, b_pos| {
             let mut a = self.view();
@@ -532,7 +530,7 @@ impl<'a> BitXor for &TensorView<'a> {
         let mat2_shape = other.shape()[other.dim() - 2..].to_vec();
         let a_shape = self.shape()[..self.dim() - 2].to_vec();
         let b_shape = other.shape()[..other.dim() - 2].to_vec();
-        let shape = combine_shapes(&a_shape, &b_shape, 0);
+        let shape = combine_shapes(&a_shape, &b_shape);
         let mut full_shape = shape.clone();
         full_shape.extend(&[mat1_shape[0], mat2_shape[1]]);
         let mut result = Tensor::zeros(&full_shape);
