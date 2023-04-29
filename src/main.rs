@@ -13,7 +13,7 @@ fn main() {
     let inp = g.alloc(samples);
     let lin1 = g.alloc(Tensor::rand(&mut rng, &[100, 50]));
     let lin2 = g.alloc(Tensor::rand(&mut rng, &[50, 20]));
-    let lin3 = g.alloc(Tensor::rand(&mut rng, &[20, 1]));
+    let lin3 = g.alloc(Tensor::rand(&mut rng, &[20, 10]));
 
     let post_lin1 = g.call(MatMul::new(), &[inp, lin1]);
     let post_sigm1 = g.call(Sigmoid::new(), &[post_lin1]);
@@ -24,7 +24,9 @@ fn main() {
     let post_lin3 = g.call(MatMul::new(), &[post_sigm2, lin3]);
     let post_sigm3 = g.call(Sigmoid::new(), &[post_lin3]);
 
-    println!("{:?}", g.get(post_sigm3));
+    let soft = g.call(Softmax::new(), &[post_sigm3]);
+
+    println!("{:?}", g.get(soft));
 
     /*let t3 = g.call(Add::new(), &[t2, neg_expected]);
     let t4 = g.call(Pow::new(2.), &[t3]);

@@ -138,3 +138,35 @@ impl Function for Sigmoid {
         grads.insert(inps[0], &der * &grads[&out]);
     }
 }
+
+pub struct Softmax;
+impl Softmax {
+    pub fn new() -> Box<dyn Function> {
+        Box::new(Self {})
+    }
+}
+impl Function for Softmax {
+    fn run(&self, inps: &[&Tensor]) -> Tensor {
+        assert_eq!(inps.len(), 1);
+        let mut soft = inps[0].clone();
+        for mut l in soft
+            .reshape_mut(&[0, soft.shape()[soft.dim() - 1]])
+            .iter_mut()
+        {
+            let sum = l.map(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
+            for mut v in l.iter_mut() {
+                v.set(Tensor::scalar(v.scalar().exp() / sum));
+            }
+        }
+        soft
+    }
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor>,
+        tensors: &mut HashMap<TensorId, Tensor>,
+        inps: &[TensorId],
+        out: TensorId,
+    ) {
+        unimplemented!();
+    }
+}
