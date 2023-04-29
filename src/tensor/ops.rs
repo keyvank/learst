@@ -41,6 +41,49 @@ impl<'a, V: TensorElement + std::ops::Add<Output = V>> Add for &TensorView<'a, V
         result
     }
 }
+
+impl<V: TensorElement + std::ops::Sub<Output = V>> Sub for &Tensor<V> {
+    type Output = Tensor<V>;
+    fn sub(self, other: &Tensor<V>) -> Self::Output {
+        &self.view() - &other.view()
+    }
+}
+impl<'a, V: TensorElement + std::ops::Sub<Output = V>> Sub<&TensorView<'a, V>> for &Tensor<V> {
+    type Output = Tensor<V>;
+    fn sub(self, other: &TensorView<'a, V>) -> Self::Output {
+        &self.view() - other
+    }
+}
+impl<'a, V: TensorElement + std::ops::Sub<Output = V>> Sub<&Tensor<V>> for &TensorView<'a, V> {
+    type Output = Tensor<V>;
+    fn sub(self, other: &Tensor<V>) -> Self::Output {
+        self - &other.view()
+    }
+}
+impl<'a, V: TensorElement + std::ops::Sub<Output = V>> Sub for &TensorView<'a, V> {
+    type Output = Tensor<V>;
+    fn sub(self, other: &TensorView<V>) -> Self::Output {
+        let shape = combine_shapes(self.shape(), other.shape());
+        let mut result = Tensor::zeros(&shape);
+        binary(self.shape(), other.shape(), |r_pos, a_pos, b_pos| {
+            let mut a = self.view();
+            for i in a_pos.iter() {
+                a.zoom(*i);
+            }
+            let mut b = other.view();
+            for i in b_pos.iter() {
+                b.zoom(*i);
+            }
+            let mut r = result.view_mut();
+            for i in r_pos.iter() {
+                r.zoom(*i);
+            }
+            r.set(Tensor::scalar(a.scalar() - b.scalar()));
+        });
+        result
+    }
+}
+
 impl<V: TensorElement + std::ops::Mul<Output = V>> Mul for &Tensor<V> {
     type Output = Tensor<V>;
     fn mul(self, other: &Tensor<V>) -> Self::Output {

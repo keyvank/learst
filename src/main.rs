@@ -1,8 +1,14 @@
-use learst::graph::Graph;
+use learst::graph::{Graph, TensorId};
 use learst::optimizer::NaiveOptimizer;
 use learst::tensor::{Tensor, TensorOps};
 use learst::*;
 use rand::prelude::*;
+
+fn mse(g: &mut Graph, out: TensorId, target: TensorId) -> TensorId {
+    let diff = g.call(Sub::new(), &[out, target]);
+    let diff_sqr = g.call(Pow::new(2.), &[diff]);
+    diff_sqr
+}
 
 fn main() {
     let mut rng = thread_rng();

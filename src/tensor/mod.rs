@@ -1,7 +1,7 @@
 use rand::prelude::*;
 use std::ops::*;
 mod ops;
-use ops::*;
+pub use ops::*;
 
 pub trait TensorElement: Clone + Copy + Sized {
     fn zero() -> Self;
