@@ -1,5 +1,4 @@
 use crate::tensor::Tensor;
-use crate::*;
 
 pub trait Optimizer {
     fn step(&self, params: Vec<&mut Tensor>, grads: Vec<&Tensor>);
@@ -18,11 +17,7 @@ impl NaiveOptimizer {
 impl Optimizer for NaiveOptimizer {
     fn step(&self, params: Vec<&mut Tensor>, grads: Vec<&Tensor>) {
         for (param, grad) in params.into_iter().zip(grads.into_iter()) {
-            *param = apply(
-                AddOp {},
-                param,
-                &apply(MulOp {}, grad, &Tensor::scalar(-self.learning_rate)),
-            );
+            *param = &*param + &(grad * &Tensor::scalar(-self.learning_rate));
         }
     }
 }

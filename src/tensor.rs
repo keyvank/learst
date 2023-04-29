@@ -1,4 +1,5 @@
 use rand::prelude::*;
+use std::ops::*;
 
 #[derive(Debug, Clone)]
 pub struct Tensor {
@@ -92,13 +93,6 @@ pub trait TensorMutOps: TensorOps {
             mirror: self.tensor_mut(),
         }
     }
-    fn set_scalar(&mut self, f: f32) {
-        if self.dim() == 0 {
-            self.blob_mut()[0] = f;
-        } else {
-            panic!("Tensor is not a scalar!")
-        }
-    }
     fn fill(&mut self, v: f32) {
         self.blob_mut().fill(v);
     }
@@ -106,7 +100,7 @@ pub trait TensorMutOps: TensorOps {
         assert_eq!(self.shape(), from.shape());
         self.blob_mut().copy_from_slice(from.blob())
     }
-    fn set<T: TensorOps>(&mut self, t: &T) {
+    fn set<T: TensorOps>(&mut self, t: T) {
         assert_eq!(self.shape(), t.shape());
         self.blob_mut().clone_from_slice(t.blob());
     }
@@ -229,8 +223,7 @@ pub trait TensorOps: Sized {
         {
             for i in 0..shape[dim - 2] {
                 for j in 0..shape[dim - 1] {
-                    let d = src.get(j).get(i).scalar();
-                    dst.get_mut(i).get_mut(j).set_scalar(d);
+                    dst.get_mut(i).get_mut(j).set(src.get(j).get(i));
                 }
             }
         }
@@ -370,5 +363,202 @@ impl Tensor {
                 .collect(),
             shape: shape.to_vec(),
         }
+    }
+}
+
+fn combine_shapes(a: &[usize], b: &[usize], op_dim: usize) -> Vec<usize> {
+    assert!(a.len() >= op_dim);
+    assert!(b.len() >= op_dim);
+    let shape_len = std::cmp::max(a.len(), b.len());
+    let mut shape = Vec::new();
+    for i in op_dim..shape_len {
+        shape.insert(
+            0,
+            if i >= a.len() {
+                b[b.len() - 1 - i]
+            } else if i >= b.len() {
+                a[a.len() - 1 - i]
+            } else {
+                let (a, b) = (a[a.len() - 1 - i], b[b.len() - 1 - i]);
+                if a == b {
+                    a
+                } else if a == 1 {
+                    b
+                } else if b == 1 {
+                    a
+                } else {
+                    panic!("Cannot be combined!")
+                }
+            },
+        );
+    }
+    shape
+}
+
+pub fn binary<F: FnMut(&[usize], &[usize], &[usize]) -> ()>(a: &[usize], b: &[usize], mut f: F) {
+    let shape = combine_shapes(a, b, 0);
+    let mut curr = vec![0; shape.len()];
+    fn calc_shape(pos: &[usize], shape: &[usize]) -> Vec<usize> {
+        pos[pos.len() - shape.len()..]
+            .iter()
+            .zip(shape.iter())
+            .map(|(p, s)| if *s == 1 { 0 } else { *p })
+            .collect()
+    }
+    loop {
+        let a_pos = calc_shape(&curr, a);
+        let b_pos = calc_shape(&curr, b);
+        f(&curr, &a_pos, &b_pos);
+        if curr.len() == 0 {
+            return;
+        }
+        curr[shape.len() - 1] += 1;
+        for i in (0..curr.len()).rev() {
+            if curr[i] == shape[i] {
+                if i == 0 {
+                    return;
+                }
+                curr[i] = 0;
+                curr[i - 1] += 1;
+            }
+        }
+    }
+}
+
+impl Add for &Tensor {
+    type Output = Tensor;
+    fn add(self, other: &Tensor) -> Self::Output {
+        &self.view() + &other.view()
+    }
+}
+impl<'a> Add<&TensorView<'a>> for &Tensor {
+    type Output = Tensor;
+    fn add(self, other: &TensorView<'a>) -> Self::Output {
+        &self.view() + other
+    }
+}
+impl<'a> Add<&Tensor> for &TensorView<'a> {
+    type Output = Tensor;
+    fn add(self, other: &Tensor) -> Self::Output {
+        self + &other.view()
+    }
+}
+impl<'a> Add for &TensorView<'a> {
+    type Output = Tensor;
+    fn add(self, other: &TensorView) -> Self::Output {
+        let shape = combine_shapes(self.shape(), other.shape(), 0);
+        let mut result = Tensor::zeros(&shape);
+        binary(self.shape(), other.shape(), |r_pos, a_pos, b_pos| {
+            let mut a = self.view();
+            for i in a_pos.iter() {
+                a.zoom(*i);
+            }
+            let mut b = other.view();
+            for i in b_pos.iter() {
+                b.zoom(*i);
+            }
+            let mut r = result.view_mut();
+            for i in r_pos.iter() {
+                r.zoom(*i);
+            }
+            r.set(Tensor::scalar(a.scalar() + b.scalar()));
+        });
+        result
+    }
+}
+impl Mul for &Tensor {
+    type Output = Tensor;
+    fn mul(self, other: &Tensor) -> Self::Output {
+        &self.view() * &other.view()
+    }
+}
+impl<'a> Mul<&TensorView<'a>> for &Tensor {
+    type Output = Tensor;
+    fn mul(self, other: &TensorView<'a>) -> Self::Output {
+        &self.view() * other
+    }
+}
+impl<'a> Mul<&Tensor> for &TensorView<'a> {
+    type Output = Tensor;
+    fn mul(self, other: &Tensor) -> Self::Output {
+        self * &other.view()
+    }
+}
+impl<'a> Mul for &TensorView<'a> {
+    type Output = Tensor;
+    fn mul(self, other: &TensorView) -> Self::Output {
+        let shape = combine_shapes(self.shape(), other.shape(), 0);
+        let mut result = Tensor::zeros(&shape);
+        binary(self.shape(), other.shape(), |r_pos, a_pos, b_pos| {
+            let mut a = self.view();
+            for i in a_pos.iter() {
+                a.zoom(*i);
+            }
+            let mut b = other.view();
+            for i in b_pos.iter() {
+                b.zoom(*i);
+            }
+            let mut r = result.view_mut();
+            for i in r_pos.iter() {
+                r.zoom(*i);
+            }
+            r.set(Tensor::scalar(a.scalar() * b.scalar()));
+        });
+        result
+    }
+}
+impl BitXor for &Tensor {
+    type Output = Tensor;
+    fn bitxor(self, other: &Tensor) -> Self::Output {
+        &self.view() ^ &other.view()
+    }
+}
+impl<'a> BitXor<&TensorView<'a>> for &Tensor {
+    type Output = Tensor;
+    fn bitxor(self, other: &TensorView<'a>) -> Self::Output {
+        &self.view() ^ other
+    }
+}
+impl<'a> BitXor<&Tensor> for &TensorView<'a> {
+    type Output = Tensor;
+    fn bitxor(self, other: &Tensor) -> Self::Output {
+        self ^ &other.view()
+    }
+}
+impl<'a> BitXor for &TensorView<'a> {
+    type Output = Tensor;
+    fn bitxor(self, other: &TensorView) -> Self::Output {
+        let mat1_shape = self.shape()[self.dim() - 2..].to_vec();
+        let mat2_shape = other.shape()[other.dim() - 2..].to_vec();
+        let a_shape = self.shape()[..self.dim() - 2].to_vec();
+        let b_shape = other.shape()[..other.dim() - 2].to_vec();
+        let shape = combine_shapes(&a_shape, &b_shape, 0);
+        let mut full_shape = shape.clone();
+        full_shape.extend(&[mat1_shape[0], mat2_shape[1]]);
+        let mut result = Tensor::zeros(&full_shape);
+        binary(&a_shape, &b_shape, |r_pos, a_pos, b_pos| {
+            let mut a = self.view();
+            for i in a_pos.iter() {
+                a.zoom(*i);
+            }
+            let mut b = other.view();
+            for i in b_pos.iter() {
+                b.zoom(*i);
+            }
+            let mut r = result.view_mut();
+            for i in r_pos.iter() {
+                r.zoom(*i);
+            }
+            for i in 0..r.shape()[0] {
+                for j in 0..r.shape()[1] {
+                    let mut sum = Tensor::scalar(0.);
+                    for k in 0..a.shape()[1] {
+                        sum = &sum + &(&a.get(i).get(k) * &b.get(k).get(j));
+                    }
+                    r.get_mut(i).get_mut(j).set(sum);
+                }
+            }
+        });
+        result
     }
 }
