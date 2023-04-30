@@ -12,7 +12,7 @@ pub trait Function {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     );
@@ -32,7 +32,7 @@ impl Function for Add {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        _tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        _tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -56,7 +56,7 @@ impl Function for Sub {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        _tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        _tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -80,7 +80,7 @@ impl Function for MatMul {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -104,7 +104,7 @@ impl Function for Pow {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -130,7 +130,7 @@ impl Function for Mul {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        _tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        _tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -153,7 +153,7 @@ impl Function for Sigmoid {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -180,7 +180,7 @@ impl Function for Softmax {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {
@@ -222,7 +222,7 @@ impl Function for CrossEntropy {
     fn grad(
         &self,
         grads: &mut HashMap<TensorId, Tensor<f32>>,
-        tensors: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &HashMap<TensorId, Tensor<f32>>,
         inps: &[TensorId],
         out: TensorId,
     ) {

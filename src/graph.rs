@@ -69,7 +69,7 @@ impl Graph {
                     .or_insert(Tensor::<f32>::zeros(&shape));
             }
             comp.func
-                .grad(&mut self.grads, &mut self.tensors, &comp.inps, id);
+                .grad(&mut self.grads, &self.tensors, &comp.inps, id);
         }
     }
     pub fn backward_all(&mut self, id: TensorId) {
