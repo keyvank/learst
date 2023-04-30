@@ -23,6 +23,14 @@ impl TensorElement for u32 {
         1
     }
 }
+impl TensorElement for bool {
+    fn zero() -> Self {
+        false
+    }
+    fn one() -> Self {
+        true
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Tensor<V: TensorElement> {
