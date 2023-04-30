@@ -99,7 +99,7 @@ impl Pow {
 impl Function for Pow {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        inps[0].map(|f| f.powf(self.0))
+        inps[0].mapf(|f| f.powf(self.0))
     }
     fn grad(
         &self,
@@ -125,7 +125,7 @@ impl Mul {
 impl Function for Mul {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        inps[0].map(|f| f * self.0)
+        inps[0].mapf(|f| f * self.0)
     }
     fn grad(
         &self,
@@ -148,7 +148,7 @@ impl Sigmoid {
 impl Function for Sigmoid {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        inps[0].map(|f| 1. / (1. + (-f).exp()))
+        inps[0].mapf(|f| 1. / (1. + (-f).exp()))
     }
     fn grad(
         &self,
@@ -158,7 +158,7 @@ impl Function for Sigmoid {
         out: TensorId,
     ) {
         assert_eq!(inps.len(), 1);
-        let der = tensors[&out].map(|f| f * (1. - f));
+        let der = tensors[&out].mapf(|f| f * (1. - f));
         grads.insert(inps[0], &der * &grads[&out]);
     }
 }
@@ -177,7 +177,7 @@ impl Function for Softmax {
             .reshape_mut(&[0, soft.shape()[soft.dim() - 1]])
             .iter_mut()
         {
-            let sum = l.map(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
+            let sum = l.mapf(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
             for mut v in l.iter_mut() {
                 v.set(Tensor::<f32>::scalar(v.scalar().exp() / sum));
             }

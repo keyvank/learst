@@ -170,10 +170,25 @@ pub trait TensorOps<V: TensorElement>: Sized {
     fn tensor(&self) -> &Tensor<V>;
     fn offset(&self) -> usize;
 
-    fn map<F: Fn(V) -> V>(&self, f: F) -> Tensor<V> {
+    fn mapf<F: Fn(V) -> V>(&self, f: F) -> Tensor<V> {
+        self.map(0, |t| Tensor::scalar(f(t.scalar())))
+    }
+
+    fn map<F: Fn(TensorView<V>) -> Tensor<V>>(&self, dim: usize, f: F) -> Tensor<V> {
+        let inp_shape = self.shape()[self.dim() - dim..].to_vec();
+        let mut reshape = vec![0];
+        reshape.extend(&inp_shape);
+        let blob = self
+            .reshape(&reshape)
+            .iter()
+            .map(|v| f(v))
+            .collect::<Vec<_>>();
+        assert!(blob.iter().all(|t| t.shape() == blob[0].shape()));
+        let mut out_shape = self.shape()[..self.dim() - dim].to_vec();
+        out_shape.extend(blob[0].shape());
         Tensor {
-            blob: self.blob().iter().map(|v| f(*v)).collect(),
-            shape: self.shape().to_vec(),
+            blob: blob.into_iter().map(|t| t.blob).flatten().collect(),
+            shape: out_shape,
         }
     }
 
