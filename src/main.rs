@@ -65,15 +65,11 @@ fn main() {
 
     println!("{:?}", g.get(soft));
 
-    /*let t3 = g.call(Add::new(), &[t2, neg_expected]);
-    let t4 = g.call(Pow::new(2.), &[t3]);
-    let t5 = g.call(Mul::new(0.05), &[t4]);
     let mut opt = NaiveOptimizer::new(0.0001);
     for _ in 0..1000 {
         g.forward();
         g.zero_grad();
-        g.backward_all(t5);
-        g.optimize(&mut opt, &[t1].into_iter().collect());
+        g.backward_all(soft);
+        g.optimize(&mut opt, &[soft].into_iter().collect());
     }
-    println!("{:?}", g.get(t1));*/
 }

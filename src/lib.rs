@@ -172,17 +172,10 @@ impl Softmax {
 impl Function for Softmax {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        let mut soft = inps[0].clone();
-        for mut l in soft
-            .reshape_mut(&[0, soft.shape()[soft.dim() - 1]])
-            .iter_mut()
-        {
+        inps[0].map(1, |l| {
             let sum = l.mapf(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
-            for mut v in l.iter_mut() {
-                v.set(Tensor::<f32>::scalar(v.scalar().exp() / sum));
-            }
-        }
-        soft
+            l.mapf(|f| f.exp() / sum)
+        })
     }
     fn grad(
         &self,
@@ -191,7 +184,27 @@ impl Function for Softmax {
         inps: &[TensorId],
         out: TensorId,
     ) {
-        unimplemented!();
+        let jacobian = tensors[&out].map(1, |l| {
+            let n = l.shape()[0];
+            let mut jacobian = Tensor::<f32>::zeros(&[n, n]);
+            for i in 0..n {
+                for j in 0..n {
+                    jacobian
+                        .get_mut(i)
+                        .get_mut(j)
+                        .set(Tensor::scalar(if i == j {
+                            let sij = l.get(i).scalar();
+                            sij * (1. - sij)
+                        } else {
+                            let si = l.get(i).scalar();
+                            let sj = l.get(j).scalar();
+                            -si * sj
+                        }));
+                }
+            }
+            jacobian
+        });
+        grads.insert(inps[0], &jacobian ^ &grads[&out]);
     }
 }
 
