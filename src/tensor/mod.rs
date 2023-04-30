@@ -174,7 +174,11 @@ pub trait TensorOps<V: TensorElement>: Sized {
         self.map(0, |t| Tensor::scalar(f(t.scalar())))
     }
 
-    fn map<F: Fn(TensorView<V>) -> Tensor<V>>(&self, dim: usize, f: F) -> Tensor<V> {
+    fn map<W: TensorElement, F: Fn(TensorView<V>) -> Tensor<W>>(
+        &self,
+        dim: usize,
+        f: F,
+    ) -> Tensor<W> {
         let inp_shape = self.shape()[self.dim() - dim..].to_vec();
         let mut reshape = vec![0];
         reshape.extend(&inp_shape);
