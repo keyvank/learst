@@ -12,7 +12,7 @@ struct Computation {
 }
 
 pub struct Graph {
-    pub grads: HashMap<TensorId, Tensor<f32>>,
+    grads: HashMap<TensorId, Tensor<f32>>,
     computations: Vec<Computation>,
     tensors: HashMap<TensorId, Tensor<f32>>,
     parents: HashMap<TensorId, HashSet<TensorId>>,
