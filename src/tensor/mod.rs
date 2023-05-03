@@ -181,7 +181,7 @@ pub trait TensorOps<V: TensorElement>: Sized {
     fn copy(&self) -> Tensor<V> {
         Tensor {
             blob: self.blob().to_vec(),
-            shape: self.shape().to_vec()
+            shape: self.shape().to_vec(),
         }
     }
 

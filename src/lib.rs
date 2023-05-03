@@ -209,16 +209,31 @@ impl Function for Softmax {
     }
 }
 
-pub struct CrossEntropy;
+pub struct CrossEntropy {
+    classes: u32,
+    target: Tensor<u32>,
+}
 impl CrossEntropy {
-    pub fn new() -> Box<dyn Function> {
-        Box::new(Self {})
+    pub fn new(classes: u32, target: Tensor<u32>) -> Box<dyn Function> {
+        Box::new(Self { classes, target })
     }
 }
 impl Function for CrossEntropy {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        unimplemented!();
+        let mut expected_shape = self.target.shape().to_vec();
+        expected_shape.push(self.classes as usize);
+        assert_eq!(inps[0].shape(), expected_shape);
+        let mut result = Tensor::<f32>::zeros(self.target.shape());
+        for ((mut r, o), t) in result
+            .reshape_mut(&[0])
+            .iter_mut()
+            .zip(inps[0].reshape(&[0, self.classes as usize]).iter())
+            .zip(self.target.reshape(&[0]).iter())
+        {
+            r.set(Tensor::scalar(-(o.get(t.scalar() as usize).scalar().ln())));
+        }
+        result
     }
     fn grad(
         &self,
@@ -227,6 +242,8 @@ impl Function for CrossEntropy {
         inps: &[TensorId],
         out: TensorId,
     ) {
-        unimplemented!();
+        assert_eq!(inps.len(), 1);
+        let der = tensors[&inps[0]].mapf(|f| 1. / f);
+        grads.insert(inps[0], &der * &grads[&out]);
     }
 }

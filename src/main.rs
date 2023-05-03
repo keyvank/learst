@@ -45,7 +45,8 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let samples = Tensor::fill_by(&[20, 100], |pos| (pos[0] + pos[1]) as f32);
+    let samples = Tensor::fill_by(&[10, 100], |pos| (pos[0] + pos[1]) as f32);
+    let outputs = Tensor::fill_by(&[10], |_| 3);
 
     let inp = g.alloc(samples);
     let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[100, 50]));
@@ -62,13 +63,14 @@ fn main() {
     let post_sigm3 = g.call(Sigmoid::new(), &[post_lin3]);
 
     let soft = g.call(Softmax::new(), &[post_sigm3]);
+    let loss = g.call(CrossEntropy::new(10, outputs), &[soft]);
 
-    let mut opt = NaiveOptimizer::new(0.0001);
+    let mut opt = NaiveOptimizer::new(0.1);
     for _ in 0..1000 {
         g.forward();
         g.zero_grad();
-        g.backward_all(soft);
-        println!("{:?}", g.get(soft));
-        g.optimize(&mut opt, &[soft].into_iter().collect());
+        g.backward_all(loss);
+        println!("{:?}", g.get(loss));
+        g.optimize(&mut opt, &[lin1, lin2, lin3].into_iter().collect());
     }
 }
