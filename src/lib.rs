@@ -204,7 +204,8 @@ impl Function for Softmax {
             }
             jacobian
         });
-        grads.insert(inps[0], &jacobian ^ &grads[&out]);
+        let result = &grads[&out].unsqueeze(-2) ^ &jacobian;
+        grads.insert(inps[0], result.squeeze(-2).copy());
     }
 }
 

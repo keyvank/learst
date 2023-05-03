@@ -178,6 +178,13 @@ pub trait TensorOps<V: TensorElement>: Sized {
     fn tensor(&self) -> &Tensor<V>;
     fn offset(&self) -> usize;
 
+    fn copy(&self) -> Tensor<V> {
+        Tensor {
+            blob: self.blob().to_vec(),
+            shape: self.shape().to_vec()
+        }
+    }
+
     fn mapf<F: Fn(V) -> V>(&self, f: F) -> Tensor<V> {
         self.map(0, |t| Tensor::scalar(f(t.scalar())))
     }
@@ -237,6 +244,30 @@ pub trait TensorOps<V: TensorElement>: Sized {
             shape: self.shape().to_vec(),
         }
     }
+
+    fn unsqueeze(&self, at: isize) -> TensorView<V> {
+        let pos = if at >= 0 {
+            at as usize
+        } else {
+            (self.dim() as isize + at + 1) as usize
+        };
+        let mut new_shape = self.shape().to_vec();
+        new_shape.insert(pos, 1);
+        self.reshape(&new_shape)
+    }
+
+    fn squeeze(&self, at: isize) -> TensorView<V> {
+        let pos = if at >= 0 {
+            at as usize
+        } else {
+            (self.dim() as isize + at) as usize
+        };
+        assert_eq!(self.shape()[pos], 1);
+        let mut new_shape = self.shape().to_vec();
+        new_shape.remove(pos);
+        self.reshape(&new_shape)
+    }
+
     fn reshape(&self, shape: &[usize]) -> TensorView<V> {
         let final_shape = reshape(self.size(), shape);
         let new_size = final_shape.iter().fold(1, |c, s| c * s);

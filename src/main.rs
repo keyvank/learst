@@ -63,13 +63,12 @@ fn main() {
 
     let soft = g.call(Softmax::new(), &[post_sigm3]);
 
-    println!("{:?}", g.get(soft));
-
     let mut opt = NaiveOptimizer::new(0.0001);
     for _ in 0..1000 {
         g.forward();
         g.zero_grad();
         g.backward_all(soft);
+        println!("{:?}", g.get(soft));
         g.optimize(&mut opt, &[soft].into_iter().collect());
     }
 }
