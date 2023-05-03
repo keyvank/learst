@@ -61,7 +61,7 @@ impl Function for Sub {
         out: TensorId,
     ) {
         assert_eq!(inps.len(), 2);
-        grads.insert(inps[0], &grads[&inps[0]] - &grads[&out]);
+        grads.insert(inps[0], &grads[&inps[0]] + &grads[&out]);
         grads.insert(inps[1], &grads[&inps[1]] - &grads[&out]);
     }
 }
@@ -243,7 +243,21 @@ impl Function for CrossEntropy {
         out: TensorId,
     ) {
         assert_eq!(inps.len(), 1);
-        let der = tensors[&inps[0]].mapf(|f| 1. / f);
-        grads.insert(inps[0], &der * &grads[&out]);
+
+        let mut result = Tensor::<f32>::zeros(self.target.shape());
+        for ((mut r, o), t) in result
+            .reshape_mut(&[0])
+            .iter_mut()
+            .zip(
+                tensors[&inps[0]]
+                    .reshape(&[0, self.classes as usize])
+                    .iter(),
+            )
+            .zip(self.target.reshape(&[0]).iter())
+        {
+            r.set(Tensor::scalar(-1. / (o.get(t.scalar() as usize).scalar())));
+        }
+
+        grads.insert(inps[0], &result * &grads[&out]);
     }
 }
