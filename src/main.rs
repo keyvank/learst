@@ -58,20 +58,22 @@ fn main() {
     }));
 
     let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
+    let lin2 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
 
-    let out = g.call(MatMul::new(), &[samples, lin1]);
+    let out1 = g.call(MatMul::new(), &[samples, lin1]);
+    let out = g.call(MatMul::new(), &[out1, lin2]);
 
     let error = g.call(Sub::new(), &[out, expected]);
     let squared_error = g.call(Square::new(), &[error]);
     let mean_squared_error = g.call(Mean::new(), &[squared_error]);
 
-    let mut opt = NaiveOptimizer::new(0.005);
-    for _ in 0..10000 {
+    let mut opt = NaiveOptimizer::new(0.0008);
+    for _ in 0..100000 {
         g.forward();
         g.zero_grad();
         g.backward_all(mean_squared_error);
         println!("{:?}", g.get(mean_squared_error));
-        println!("{:?}", g.get(lin1));
-        g.optimize(&mut opt, &[lin1].into_iter().collect());
+        println!("{:?}", g.get(lin1) ^ g.get(lin2));
+        g.optimize(&mut opt, &[lin1, lin2].into_iter().collect());
     }
 }
