@@ -140,6 +140,33 @@ impl Function for Mul {
     }
 }
 
+pub struct Mean;
+impl Mean {
+    pub fn new() -> Box<dyn Function> {
+        Box::new(Self {})
+    }
+}
+impl Function for Mean {
+    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+        assert_eq!(inps.len(), 1);
+        assert_eq!(inps[0].dim(), 2);
+        Tensor::scalar(inps[0].blob().iter().sum::<f32>() / inps[0].blob().len() as f32)
+    }
+    fn grad(
+        &self,
+        grads: &mut HashMap<TensorId, Tensor<f32>>,
+        tensors: &HashMap<TensorId, Tensor<f32>>,
+        inps: &[TensorId],
+        out: TensorId,
+    ) {
+        assert_eq!(inps.len(), 1);
+        grads.insert(
+            inps[0],
+            &grads[&out] * &Tensor::<f32>::scalar(1. / tensors[&inps[0]].blob().len() as f32),
+        );
+    }
+}
+
 pub struct Sigmoid;
 impl Sigmoid {
     pub fn new() -> Box<dyn Function> {

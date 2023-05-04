@@ -51,9 +51,9 @@ fn main() {
     let expected = g.alloc(Tensor::fill_by(&[10, 2], |pos| {
         let v = (pos[0] * 2 + pos[1]) as f32;
         if pos[1] == 0 {
-            v * 3.
+            v * -2.
         } else {
-            v * 4.
+            v * 6.
         }
     }));
 
@@ -61,14 +61,16 @@ fn main() {
 
     let out = g.call(MatMul::new(), &[samples, lin1]);
 
-    let loss_sqrt = g.call(Sub::new(), &[out, expected]);
-    let loss = g.call(Square::new(), &[loss_sqrt]);
+    let error = g.call(Sub::new(), &[out, expected]);
+    let squared_error = g.call(Square::new(), &[error]);
+    let mean_squared_error = g.call(Mean::new(), &[squared_error]);
 
-    let mut opt = NaiveOptimizer::new(0.0002);
+    let mut opt = NaiveOptimizer::new(0.005);
     for _ in 0..10000 {
         g.forward();
         g.zero_grad();
-        g.backward_all(loss);
+        g.backward_all(mean_squared_error);
+        println!("{:?}", g.get(mean_squared_error));
         println!("{:?}", g.get(lin1));
         g.optimize(&mut opt, &[lin1].into_iter().collect());
     }
