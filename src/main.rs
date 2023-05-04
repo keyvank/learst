@@ -49,7 +49,12 @@ fn main() {
         (pos[0] * 2 + pos[1]) as f32
     }));
     let expected = g.alloc(Tensor::fill_by(&[10, 2], |pos| {
-        (pos[0] * 2 + pos[1]) as f32
+        let v = (pos[0] * 2 + pos[1]) as f32;
+        if pos[1] == 0 {
+            v * 3.
+        } else {
+            v * 4.
+        }
     }));
 
     let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
@@ -64,7 +69,7 @@ fn main() {
         g.forward();
         g.zero_grad();
         g.backward_all(loss);
-        println!("{:?}", g.get(loss));
+        println!("{:?}", g.get(lin1));
         g.optimize(&mut opt, &[lin1].into_iter().collect());
     }
 }
