@@ -90,16 +90,16 @@ impl Function for MatMul {
     }
 }
 
-pub struct Pow(f32);
-impl Pow {
-    pub fn new(p: f32) -> Box<dyn Function> {
-        Box::new(Self(p))
+pub struct Square;
+impl Square {
+    pub fn new() -> Box<dyn Function> {
+        Box::new(Self {})
     }
 }
-impl Function for Pow {
+impl Function for Square {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        inps[0].mapf(|f| f.powf(self.0))
+        inps[0].mapf(|f| f.powf(2.))
     }
     fn grad(
         &self,
@@ -109,9 +109,10 @@ impl Function for Pow {
         out: TensorId,
     ) {
         assert_eq!(inps.len(), 1);
+
         grads.insert(
             inps[0],
-            &(&tensors[&inps[0]].transpose() ^ &grads[&out]) * &Tensor::<f32>::scalar(self.0),
+            &(&tensors[&inps[0]] * &grads[&out]) * &Tensor::<f32>::scalar(2.),
         );
     }
 }

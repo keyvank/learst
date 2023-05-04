@@ -8,7 +8,7 @@ use std::io::prelude::*;
 
 fn mse(g: &mut Graph, out: TensorId, target: TensorId) -> TensorId {
     let diff = g.call(Sub::new(), &[out, target]);
-    let diff_sqr = g.call(Pow::new(2.), &[diff]);
+    let diff_sqr = g.call(Square::new(), &[diff]);
     diff_sqr
 }
 
@@ -45,32 +45,26 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let samples = Tensor::fill_by(&[10, 100], |pos| (pos[0] + pos[1]) as f32);
-    let outputs = Tensor::fill_by(&[10], |_| 3);
+    let samples = g.alloc(Tensor::fill_by(&[10, 2], |pos| {
+        (pos[0] * 2 + pos[1]) as f32
+    }));
+    let expected = g.alloc(Tensor::fill_by(&[10, 2], |pos| {
+        (pos[0] * 2 + pos[1]) as f32
+    }));
 
-    let inp = g.alloc(samples);
-    let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[100, 50]));
-    let lin2 = g.alloc(Tensor::<f32>::rand(&mut rng, &[50, 20]));
-    let lin3 = g.alloc(Tensor::<f32>::rand(&mut rng, &[20, 10]));
+    let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
 
-    let post_lin1 = g.call(MatMul::new(), &[inp, lin1]);
-    let post_sigm1 = g.call(Sigmoid::new(), &[post_lin1]);
+    let out = g.call(MatMul::new(), &[samples, lin1]);
 
-    let post_lin2 = g.call(MatMul::new(), &[post_sigm1, lin2]);
-    let post_sigm2 = g.call(Sigmoid::new(), &[post_lin2]);
+    let loss_sqrt = g.call(Sub::new(), &[out, expected]);
+    let loss = g.call(Square::new(), &[loss_sqrt]);
 
-    let post_lin3 = g.call(MatMul::new(), &[post_sigm2, lin3]);
-    let post_sigm3 = g.call(Sigmoid::new(), &[post_lin3]);
-
-    let soft = g.call(Softmax::new(), &[post_sigm3]);
-    let loss = g.call(CrossEntropy::new(10, outputs), &[soft]);
-
-    let mut opt = NaiveOptimizer::new(0.1);
-    for _ in 0..1000 {
+    let mut opt = NaiveOptimizer::new(0.0002);
+    for _ in 0..10000 {
         g.forward();
         g.zero_grad();
         g.backward_all(loss);
         println!("{:?}", g.get(loss));
-        g.optimize(&mut opt, &[lin1, lin2, lin3].into_iter().collect());
+        g.optimize(&mut opt, &[lin1].into_iter().collect());
     }
 }
