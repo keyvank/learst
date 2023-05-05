@@ -35,20 +35,26 @@ fn mnist_images() -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
     Ok((images, labels))
 }
 
+fn xor_dataset() -> (Tensor<f32>, Tensor<u32>) {
+    let xs = Tensor::<f32>::raw(&[4, 2], vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0]);
+    let ys = Tensor::<u32>::raw(&[4], vec![1, 1, 1, 0]);
+    (xs, ys)
+}
+
 fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let (xs, ys) = mnist_images().unwrap();
+    let (xs, ys) = xor_dataset();
 
     let samples = g.alloc(xs);
 
-    let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[784, 200]));
-    let lin1_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[200]));
-    let lin2 = g.alloc(Tensor::<f32>::rand(&mut rng, &[200, 100]));
-    let lin2_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[100]));
-    let lin3 = g.alloc(Tensor::<f32>::rand(&mut rng, &[100, 10]));
-    let lin3_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[10]));
+    let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 10]));
+    let lin1_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[10]));
+    let lin2 = g.alloc(Tensor::<f32>::rand(&mut rng, &[10, 20]));
+    let lin2_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[20]));
+    let lin3 = g.alloc(Tensor::<f32>::rand(&mut rng, &[20, 2]));
+    let lin3_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[2]));
 
     let out1 = g.call(MatMul::new(), &[samples, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
@@ -58,9 +64,9 @@ fn main() {
     let out2_bias_sigm = g.call(Sigmoid::new(), &[out2_bias]);
     let out3 = g.call(MatMul::new(), &[out2_bias_sigm, lin3]);
     let out3_bias = g.call(Add::new(), &[out3, lin3_bias]);
-    let out3_bias_sigm = g.call(Sigmoid::new(), &[out3_bias]);
+    let out3_bias_sigm = g.call(Softmax::new(), &[out3_bias]);
 
-    let error = g.call(CrossEntropy::new(10, ys), &[out3_bias_sigm]);
+    let error = g.call(CrossEntropy::new(2, ys), &[out3_bias_sigm]);
     //let squared_error = g.call(Square::new(), &[error]);
     let mean_error = g.call(Mean::new(), &[error]);
 
@@ -69,7 +75,7 @@ fn main() {
         g.forward();
         g.zero_grad();
         g.backward_all(mean_error);
-        println!("{:?}", g.get(mean_error));
+        println!("{:?}", g.get(out3_bias_sigm));
         g.optimize(
             &mut opt,
             &[lin1, lin2, lin3, lin1_bias, lin2_bias, lin3_bias]
