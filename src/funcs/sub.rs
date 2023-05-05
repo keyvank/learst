@@ -1,4 +1,4 @@
-use super::{Function, Tensor, TensorOps};
+use super::{Function, Tensor};
 
 pub struct Sub;
 impl Sub {
@@ -14,7 +14,7 @@ impl Function for Sub {
     fn grad(
         &self,
         inps: &[&Tensor<f32>],
-        out: &Tensor<f32>,
+        _out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         assert_eq!(inps.len(), 2);

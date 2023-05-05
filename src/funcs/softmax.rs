@@ -16,7 +16,7 @@ impl Function for Softmax {
     }
     fn grad(
         &self,
-        inps: &[&Tensor<f32>],
+        _inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
