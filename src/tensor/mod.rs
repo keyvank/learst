@@ -172,18 +172,26 @@ pub fn reshape(size: usize, shape: &[usize]) -> Vec<usize> {
     final_shape
 }
 
-pub trait TensorOps<V: TensorElement>: Sized {
+impl<V: TensorElement> From<TensorView<'_, V>> for Tensor<V> {
+    fn from(view: TensorView<'_, V>) -> Tensor<V> {
+        Tensor {
+            blob: view.blob().to_vec(),
+            shape: view.shape().to_vec(),
+        }
+    }
+}
+
+impl<V: TensorElement> From<TensorMutView<'_, V>> for Tensor<V> {
+    fn from(view: TensorMutView<'_, V>) -> Tensor<V> {
+        view.into()
+    }
+}
+
+pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> {
     fn shape(&self) -> &[usize];
     fn blob(&self) -> &[V];
     fn tensor(&self) -> &Tensor<V>;
     fn offset(&self) -> usize;
-
-    fn copy(&self) -> Tensor<V> {
-        Tensor {
-            blob: self.blob().to_vec(),
-            shape: self.shape().to_vec(),
-        }
-    }
 
     fn mapf<F: Fn(V) -> V>(&self, f: F) -> Tensor<V> {
         self.map(0, |t| Tensor::scalar(f(t.scalar())))

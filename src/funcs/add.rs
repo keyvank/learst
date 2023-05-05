@@ -18,6 +18,6 @@ impl Function for Add {
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         assert_eq!(inps.len(), 2);
-        vec![out_grad.copy(), out_grad.copy()]
+        vec![out_grad.clone(), out_grad.clone()]
     }
 }
