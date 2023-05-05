@@ -2,6 +2,7 @@ use rand::prelude::*;
 use std::ops::*;
 mod ops;
 pub use ops::*;
+use serde::{Deserialize, Serialize};
 
 pub trait TensorElement: Clone + Copy + Sized {
     fn zero() -> Self;
@@ -32,7 +33,7 @@ impl TensorElement for bool {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tensor<V: TensorElement> {
     blob: Vec<V>,
     shape: Vec<usize>,
