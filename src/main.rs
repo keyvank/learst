@@ -1,3 +1,4 @@
+use learst::funcs::*;
 use learst::graph::{Graph, TensorId};
 use learst::optimizer::NaiveOptimizer;
 use learst::tensor::{Tensor, TensorMutOps, TensorOps};

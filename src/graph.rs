@@ -1,6 +1,6 @@
+use crate::funcs::Function;
 use crate::optimizer::Optimizer;
 use crate::tensor::*;
-use crate::Function;
 use std::collections::{HashMap, HashSet};
 
 pub type TensorId = usize;
