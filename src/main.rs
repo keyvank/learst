@@ -45,17 +45,16 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let samples = g.alloc(Tensor::fill_by(&[10, 2], |pos| {
-        (pos[0] * 2 + pos[1]) as f32
-    }));
-    let expected = g.alloc(Tensor::fill_by(&[10, 2], |pos| {
-        let v = (pos[0] * 2 + pos[1]) as f32;
-        if pos[1] == 0 {
-            v * -2. - 7.
-        } else {
-            v * 6. - 2.
-        }
-    }));
+    let xs = Tensor::<f32>::rand(&mut rng, &[10, 2]);
+    let ys = xs.map(1, |l| {
+        Tensor::<f32>::raw(
+            &[2],
+            [l.get(0).scalar() * 3. + 1., l.get(1).scalar() * 4. - 2.].to_vec(),
+        )
+    });
+
+    let samples = g.alloc(xs);
+    let expected = g.alloc(ys);
 
     let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
     let lin1_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[2]));
@@ -71,8 +70,8 @@ fn main() {
     let squared_error = g.call(Square::new(), &[error]);
     let mean_squared_error = g.call(Mean::new(), &[squared_error]);
 
-    let mut opt = NaiveOptimizer::new(0.0005);
-    for _ in 0..10000 {
+    let mut opt = NaiveOptimizer::new(0.001);
+    for _ in 0..20000 {
         g.forward();
         g.zero_grad();
         g.backward_all(mean_squared_error);
@@ -87,4 +86,11 @@ fn main() {
     println!("{:?}", g.get(lin1_bias));
     println!("{:?}", g.get(lin2));
     println!("{:?}", g.get(lin2_bias));
+
+    println!(
+        "{:?}",
+        &(&(&(&Tensor::raw(&[1, 2], [0.9, 0.1].into()) ^ g.get(lin1)) + g.get(lin1_bias))
+            ^ g.get(lin2))
+            + g.get(lin2_bias)
+    );
 }
