@@ -38,6 +38,14 @@ impl Graph {
     pub fn zero_grad(&mut self) {
         self.grads.clear();
     }
+    pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) {
+        let mut shape = self.get(id).shape().to_vec();
+        let grad = self.grads.entry(id).or_insert(Tensor::zeros(&shape));
+        shape.insert(0, 0);
+        for t in add.reshape(&shape).iter() {
+            *grad = &*grad + &t;
+        }
+    }
     pub fn get(&self, id: TensorId) -> &Tensor<f32> {
         self.tensors.get(&id).expect("Tensor not found!")
     }
