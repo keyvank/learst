@@ -64,15 +64,17 @@ fn main() {
 
     let out1 = g.call(MatMul::new(), &[samples, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
-    let out2 = g.call(MatMul::new(), &[out1_bias, lin2]);
-    let out = g.call(Add::new(), &[out2, lin2_bias]);
+    let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
+    let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
+    let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
+    let out = g.call(Sigmoid::new(), &[out2_bias]);
 
     let error = g.call(Sub::new(), &[out, expected]);
     let squared_error = g.call(Square::new(), &[error]);
     let mean_squared_error = g.call(Mean::new(), &[squared_error]);
 
     let mut opt = NaiveOptimizer::new(0.001);
-    for _ in 0..20000 {
+    loop {
         g.forward();
         g.zero_grad();
         g.backward_all(mean_squared_error);
