@@ -80,11 +80,14 @@ impl Graph {
                     .entry(*inp)
                     .or_insert(Tensor::<f32>::zeros(&shape));
             }
+            let inps = comp
+                .inps
+                .iter()
+                .map(|id| &self.tensors[id])
+                .collect::<Vec<_>>();
             let result_out = &self.tensors[&id];
             let grad_out = &self.grads[&id];
-            let grads = comp
-                .func
-                .grad(&self.tensors, &comp.inps, result_out, grad_out);
+            let grads = comp.func.grad(&inps, result_out, grad_out);
             for (id, grad) in comp.inps.clone().into_iter().zip(grads.into_iter()) {
                 self.add_grad(id, grad);
             }

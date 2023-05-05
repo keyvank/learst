@@ -11,8 +11,7 @@ pub trait Function {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32>;
     fn grad(
         &self,
-        tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>>;
@@ -31,9 +30,7 @@ impl Function for Add {
     }
     fn grad(
         &self,
-
-        _tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
@@ -55,9 +52,7 @@ impl Function for Sub {
     }
     fn grad(
         &self,
-
-        _tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
@@ -79,16 +74,14 @@ impl Function for MatMul {
     }
     fn grad(
         &self,
-
-        tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         assert_eq!(inps.len(), 2);
         vec![
-            out_grad ^ &tensors[&inps[1]].transpose(),
-            &tensors[&inps[0]].transpose() ^ out_grad,
+            out_grad ^ &inps[1].transpose(),
+            &inps[0].transpose() ^ out_grad,
         ]
     }
 }
@@ -106,14 +99,12 @@ impl Function for Square {
     }
     fn grad(
         &self,
-
-        tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         assert_eq!(inps.len(), 1);
-        vec![&(&tensors[&inps[0]] * out_grad) * &Tensor::<f32>::scalar(2.)]
+        vec![&(inps[0] * out_grad) * &Tensor::<f32>::scalar(2.)]
     }
 }
 
@@ -131,14 +122,12 @@ impl Function for Mean {
     }
     fn grad(
         &self,
-
-        tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         assert_eq!(inps.len(), 1);
-        vec![out_grad * &Tensor::<f32>::scalar(1. / tensors[&inps[0]].blob().len() as f32)]
+        vec![out_grad * &Tensor::<f32>::scalar(1. / inps[0].blob().len() as f32)]
     }
 }
 
@@ -155,9 +144,7 @@ impl Function for Sigmoid {
     }
     fn grad(
         &self,
-
-        tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
@@ -183,9 +170,7 @@ impl Function for Softmax {
     }
     fn grad(
         &self,
-
-        tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
@@ -242,9 +227,7 @@ impl Function for CrossEntropy {
     }
     fn grad(
         &self,
-
-        tensors: &HashMap<TensorId, Tensor<f32>>,
-        inps: &[TensorId],
+        inps: &[&Tensor<f32>],
         out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
@@ -254,11 +237,7 @@ impl Function for CrossEntropy {
         for ((mut r, o), t) in result
             .reshape_mut(&[0])
             .iter_mut()
-            .zip(
-                tensors[&inps[0]]
-                    .reshape(&[0, self.classes as usize])
-                    .iter(),
-            )
+            .zip(inps[0].reshape(&[0, self.classes as usize]).iter())
             .zip(self.target.reshape(&[0]).iter())
         {
             r.set(Tensor::scalar(-1. / (o.get(t.scalar() as usize).scalar())));
