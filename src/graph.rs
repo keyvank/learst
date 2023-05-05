@@ -41,9 +41,13 @@ impl Graph {
     pub fn add_grad<T: TensorOps<f32>>(&mut self, id: TensorId, add: T) {
         let mut shape = self.get(id).shape().to_vec();
         let grad = self.grads.entry(id).or_insert(Tensor::zeros(&shape));
-        shape.insert(0, 0);
-        for t in add.reshape(&shape).iter() {
-            *grad = &*grad + &t;
+        if add.dim() >= shape.len() {
+            shape.insert(0, 0);
+            for t in add.reshape(&shape).iter() {
+                *grad = &*grad + &t;
+            }
+        } else {
+            *grad = &*grad + &add.view();
         }
     }
     pub fn get(&self, id: TensorId) -> &Tensor<f32> {
@@ -76,8 +80,14 @@ impl Graph {
                     .entry(*inp)
                     .or_insert(Tensor::<f32>::zeros(&shape));
             }
-            comp.func
-                .grad(&mut self.grads, &self.tensors, &comp.inps, id);
+            let result_out = &self.tensors[&id];
+            let grad_out = &self.grads[&id];
+            let grads = comp
+                .func
+                .grad(&self.tensors, &comp.inps, result_out, grad_out);
+            for (id, grad) in comp.inps.clone().into_iter().zip(grads.into_iter()) {
+                self.add_grad(id, grad);
+            }
         }
     }
     pub fn backward_all(&mut self, id: TensorId) {

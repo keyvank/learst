@@ -51,29 +51,40 @@ fn main() {
     let expected = g.alloc(Tensor::fill_by(&[10, 2], |pos| {
         let v = (pos[0] * 2 + pos[1]) as f32;
         if pos[1] == 0 {
-            v * -2.
+            v * -2. - 7.
         } else {
-            v * 6.
+            v * 6. - 2.
         }
     }));
 
     let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
+    let lin1_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[2]));
     let lin2 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
+    let lin2_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[2]));
 
     let out1 = g.call(MatMul::new(), &[samples, lin1]);
-    let out = g.call(MatMul::new(), &[out1, lin2]);
+    let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
+    let out2 = g.call(MatMul::new(), &[out1_bias, lin2]);
+    let out = g.call(Add::new(), &[out2, lin2_bias]);
 
     let error = g.call(Sub::new(), &[out, expected]);
     let squared_error = g.call(Square::new(), &[error]);
     let mean_squared_error = g.call(Mean::new(), &[squared_error]);
 
-    let mut opt = NaiveOptimizer::new(0.0008);
-    for _ in 0..100000 {
+    let mut opt = NaiveOptimizer::new(0.0005);
+    for _ in 0..10000 {
         g.forward();
         g.zero_grad();
         g.backward_all(mean_squared_error);
         println!("{:?}", g.get(mean_squared_error));
-        println!("{:?}", g.get(lin1) ^ g.get(lin2));
-        g.optimize(&mut opt, &[lin1, lin2].into_iter().collect());
+        g.optimize(
+            &mut opt,
+            &[lin1, lin2, lin1_bias, lin2_bias].into_iter().collect(),
+        );
     }
+
+    println!("{:?}", g.get(lin1));
+    println!("{:?}", g.get(lin1_bias));
+    println!("{:?}", g.get(lin2));
+    println!("{:?}", g.get(lin2_bias));
 }
