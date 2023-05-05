@@ -34,16 +34,23 @@ impl Function for CrossEntropy {
     ) -> Vec<Tensor<f32>> {
         assert_eq!(inps.len(), 1);
 
-        let mut result = Tensor::<f32>::zeros(self.target.shape());
+        let mut result = Tensor::<f32>::zeros(inps[0].shape());
         for ((mut r, o), t) in result
-            .reshape_mut(&[0])
+            .reshape_mut(&[0, self.classes as usize])
             .iter_mut()
             .zip(inps[0].reshape(&[0, self.classes as usize]).iter())
             .zip(self.target.reshape(&[0]).iter())
         {
-            r.set(Tensor::scalar(-1. / (o.get(t.scalar() as usize).scalar())));
+            for c in 0..self.classes as usize {
+                r.get_mut(c)
+                    .set(Tensor::scalar(if t.scalar() as usize == c {
+                        o.get(c).scalar() - 1.
+                    } else {
+                        o.get(c).scalar()
+                    }));
+            }
         }
-
-        vec![&result * out_grad]
+        let grad = &out_grad.unsqueeze(-2) ^ &result;
+        vec![grad.squeeze(-2).into()]
     }
 }

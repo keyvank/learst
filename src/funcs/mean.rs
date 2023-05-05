@@ -9,7 +9,6 @@ impl Mean {
 impl Function for Mean {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        assert_eq!(inps[0].dim(), 2);
         Tensor::scalar(inps[0].blob().iter().sum::<f32>() / inps[0].blob().len() as f32)
     }
     fn grad(

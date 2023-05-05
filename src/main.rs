@@ -47,15 +47,10 @@ fn main() {
     let mut g = Graph::new();
 
     let xs = Tensor::<f32>::rand(&mut rng, &[10, 2]);
-    let ys = xs.map(1, |l| {
-        Tensor::<f32>::raw(
-            &[2],
-            [l.get(0).scalar() * 3. + 1., l.get(1).scalar() * 4. - 2.].to_vec(),
-        )
-    });
+    let ys = xs.map(1, |l| Tensor::<u32>::scalar(0));
+    //print
 
     let samples = g.alloc(xs);
-    let expected = g.alloc(ys);
 
     let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 2]));
     let lin1_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[2]));
@@ -67,33 +62,21 @@ fn main() {
     let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
     let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
     let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
-    let out = g.call(Sigmoid::new(), &[out2_bias]);
+    let out = g.call(Softmax::new(), &[out2_bias]);
 
-    let error = g.call(Sub::new(), &[out, expected]);
-    let squared_error = g.call(Square::new(), &[error]);
-    let mean_squared_error = g.call(Mean::new(), &[squared_error]);
+    let error = g.call(CrossEntropy::new(2, ys), &[out]);
+    //let squared_error = g.call(Square::new(), &[error]);
+    let mean_error = g.call(Mean::new(), &[error]);
 
     let mut opt = NaiveOptimizer::new(0.001);
     loop {
         g.forward();
         g.zero_grad();
-        g.backward_all(mean_squared_error);
-        println!("{:?}", g.get(mean_squared_error));
+        g.backward_all(mean_error);
+        println!("{:?}", g.get(mean_error));
         g.optimize(
             &mut opt,
             &[lin1, lin2, lin1_bias, lin2_bias].into_iter().collect(),
         );
     }
-
-    println!("{:?}", g.get(lin1));
-    println!("{:?}", g.get(lin1_bias));
-    println!("{:?}", g.get(lin2));
-    println!("{:?}", g.get(lin2_bias));
-
-    println!(
-        "{:?}",
-        &(&(&(&Tensor::raw(&[1, 2], [0.9, 0.1].into()) ^ g.get(lin1)) + g.get(lin1_bias))
-            ^ g.get(lin2))
-            + g.get(lin2_bias)
-    );
 }
