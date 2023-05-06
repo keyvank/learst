@@ -37,7 +37,7 @@ fn mnist_images() -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
 
 fn xor_dataset() -> (Tensor<f32>, Tensor<f32>) {
     let xs = Tensor::<f32>::raw(&[4, 2], vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0]);
-    let ys = Tensor::<f32>::raw(&[4, 1], vec![0.0, 1.0, 1.0, 0.5]);
+    let ys = Tensor::<f32>::raw(&[4, 2], vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
     (xs, ys)
 }
 
@@ -56,8 +56,8 @@ fn main() {
     let lin2_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[20]));
     let lin3 = g.alloc(Tensor::<f32>::rand(&mut rng, &[20, 20]));
     let lin3_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[20]));
-    let lin4 = g.alloc(Tensor::<f32>::rand(&mut rng, &[20, 1]));
-    let lin4_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[1]));
+    let lin4 = g.alloc(Tensor::<f32>::rand(&mut rng, &[20, 2]));
+    let lin4_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[2]));
 
     let out1 = g.call(MatMul::new(), &[samples, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
@@ -70,7 +70,7 @@ fn main() {
     let out3_bias_sigm = g.call(Sigmoid::new(), &[out3_bias]);
     let out4 = g.call(MatMul::new(), &[out3_bias_sigm, lin4]);
     let out4_bias = g.call(Add::new(), &[out4, lin4_bias]);
-    let out4_bias_sigm = g.call(Sigmoid::new(), &[out4_bias]);
+    let out4_bias_sigm = g.call(Softmax::new(), &[out4_bias]);
 
     let error = g.call(Sub::new(), &[out4_bias_sigm, expected]);
     let squared_error = g.call(Square::new(), &[error]);
