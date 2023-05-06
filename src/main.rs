@@ -35,9 +35,9 @@ fn mnist_images() -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
     Ok((images, labels))
 }
 
-fn xor_dataset() -> (Tensor<f32>, Tensor<f32>) {
+fn xor_dataset() -> (Tensor<f32>, Tensor<u32>) {
     let xs = Tensor::<f32>::raw(&[4, 2], vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0]);
-    let ys = Tensor::<f32>::raw(&[4, 2], vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
+    let ys = Tensor::<u32>::raw(&[4], vec![0, 1, 0, 1]);
     (xs, ys)
 }
 
@@ -48,7 +48,6 @@ fn main() {
     let (xs, ys) = xor_dataset();
 
     let samples = g.alloc(xs);
-    let expected = g.alloc(ys);
 
     let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[2, 10]));
     let lin1_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[10]));
@@ -72,9 +71,8 @@ fn main() {
     let out4_bias = g.call(Add::new(), &[out4, lin4_bias]);
     let out4_bias_sigm = g.call(Softmax::new(), &[out4_bias]);
 
-    let error = g.call(Sub::new(), &[out4_bias_sigm, expected]);
-    let squared_error = g.call(Square::new(), &[error]);
-    let mean_error = g.call(Mean::new(), &[squared_error]);
+    let error = g.call(CrossEntropy::new(2, ys), &[out4_bias_sigm]);
+    let mean_error = g.call(Mean::new(), &[error]);
 
     let mut opt = NaiveOptimizer::new(1.);
     loop {

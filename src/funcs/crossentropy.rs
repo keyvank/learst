@@ -50,7 +50,7 @@ impl Function for CrossEntropy {
                     }));
             }
         }
-        let grad = &out_grad.unsqueeze(-2) ^ &result;
-        vec![grad.squeeze(-2).into()]
+
+        vec![&out_grad.unsqueeze(-1) * &result]
     }
 }
