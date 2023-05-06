@@ -44,9 +44,9 @@ impl Function for CrossEntropy {
             for c in 0..self.classes as usize {
                 r.get_mut(c)
                     .set(Tensor::scalar(if t.scalar() as usize == c {
-                        o.get(c).scalar() - 1.
+                        -1. / o.get(c).scalar()
                     } else {
-                        o.get(c).scalar()
+                        1. / (1. - o.get(c).scalar())
                     }));
             }
         }

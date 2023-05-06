@@ -37,7 +37,7 @@ fn mnist_images() -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
 
 fn xor_dataset() -> (Tensor<f32>, Tensor<u32>) {
     let xs = Tensor::<f32>::raw(&[4, 2], vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0]);
-    let ys = Tensor::<u32>::raw(&[4], vec![1, 1, 1, 0]);
+    let ys = Tensor::<u32>::raw(&[4], vec![1, 1, 1, 1]);
     (xs, ys)
 }
 
@@ -75,7 +75,7 @@ fn main() {
         g.forward();
         g.zero_grad();
         g.backward_all(mean_error);
-        println!("{:?}", g.get(out3_bias_sigm));
+        println!("{:?}", g.get(mean_error));
         g.optimize(
             &mut opt,
             &[lin1, lin2, lin3, lin1_bias, lin2_bias, lin3_bias]
