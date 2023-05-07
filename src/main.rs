@@ -7,7 +7,10 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 
-fn mnist_images(limit: Option<usize>) -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
+fn mnist_images(
+    skip: Option<usize>,
+    limit: Option<usize>,
+) -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
     let mut img_file = File::open("train-images.idx3-ubyte")?;
     let mut img_bytes = Vec::new();
     img_file.read_to_end(&mut img_bytes)?;
@@ -26,6 +29,7 @@ fn mnist_images(limit: Option<usize>) -> std::io::Result<(Tensor<f32>, Tensor<u3
     for (i, (img, label)) in img_bytes[8..]
         .chunks(784)
         .zip(label_bytes[8..].iter())
+        .skip(skip.unwrap_or_default())
         .take(final_num_samples)
         .enumerate()
     {
@@ -49,7 +53,7 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let (xs, ys) = mnist_images(Some(1000)).unwrap();
+    let (xs, ys) = mnist_images(Some(29000), Some(1000)).unwrap();
 
     let samples = g.alloc(xs);
 
