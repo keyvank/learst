@@ -48,7 +48,7 @@ fn main() {
     let mut rng = thread_rng();
     let mut g = Graph::new();
 
-    let (xs, ys) = mnist_images(Some(10)).unwrap();
+    let (xs, ys) = mnist_images(Some(1000)).unwrap();
 
     let samples = g.alloc(xs);
 

@@ -176,15 +176,25 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
             for i in r_pos.iter() {
                 r.zoom(*i);
             }
+            let res = (0..r.shape()[0])
+                .into_par_iter()
+                .map(|i| {
+                    let mut row = Vec::new();
+                    for j in 0..b.shape()[1] {
+                        let mut sum = Tensor::scalar(
+                            <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero(),
+                        );
+                        for k in 0..a.shape()[1] {
+                            sum = &sum + &(&a.get(i).get(k) * &b.get(k).get(j));
+                        }
+                        row.push(sum);
+                    }
+                    row
+                })
+                .collect::<Vec<_>>();
             for i in 0..r.shape()[0] {
                 for j in 0..r.shape()[1] {
-                    let mut sum = Tensor::scalar(
-                        <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero(),
-                    );
-                    for k in 0..a.shape()[1] {
-                        sum = &sum + &(&a.get(i).get(k) * &b.get(k).get(j));
-                    }
-                    r.get_mut(i).get_mut(j).set(sum);
+                    r.get_mut(i).get_mut(j).set(res[i][j].clone());
                 }
             }
         });

@@ -39,6 +39,9 @@ pub struct Tensor<V: TensorElement> {
     shape: Vec<usize>,
 }
 
+unsafe impl<V: TensorElement> Send for Tensor<V> {}
+unsafe impl<V: TensorElement> Sync for Tensor<V> {}
+
 #[derive(Debug)]
 pub struct TensorView<'a, V: TensorElement> {
     mirror: &'a Tensor<V>,
