@@ -3,6 +3,7 @@ use learst::graph::Graph;
 use learst::optimizer::NaiveOptimizer;
 use learst::tensor::{Tensor, TensorMutOps};
 use rand::prelude::*;
+use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -77,19 +78,30 @@ fn main() {
     let error = g.call(CrossEntropy::new(10, ys), &[out4_bias_sigm]);
     let mean_error = g.call(Mean::new(), &[error]);
 
-    let mut opt = NaiveOptimizer::new(0.1);
+    let params = vec![
+        lin1, lin2, lin3, lin4, lin1_bias, lin2_bias, lin3_bias, lin4_bias,
+    ];
+
+    for p in params.iter() {
+        let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
+        let mut bytes = Vec::new();
+        tensor_file.read_to_end(&mut bytes).unwrap();
+        let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
+        g.load(*p, t);
+    }
+
+    let mut opt = NaiveOptimizer::new(0.5);
     loop {
         g.forward();
         g.zero_grad();
         g.backward_all(mean_error);
         println!("{:?}", g.get(mean_error));
-        g.optimize(
-            &mut opt,
-            &[
-                lin1, lin2, lin3, lin4, lin1_bias, lin2_bias, lin3_bias, lin4_bias,
-            ]
-            .into_iter()
-            .collect(),
-        );
+
+        for p in params.iter() {
+            let data = bincode::serialize(g.get(*p)).unwrap();
+            fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
+        }
+
+        g.optimize(&mut opt, &params.iter().cloned().collect());
     }
 }

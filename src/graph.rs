@@ -35,6 +35,10 @@ impl Graph {
         self.next_tensor_id += 1;
         id
     }
+    pub fn load(&mut self, tensor_id: TensorId, tensor: Tensor<f32>) {
+        assert_eq!(self.tensors[&tensor_id].shape(), tensor.shape());
+        self.tensors.insert(tensor_id, tensor);
+    }
     pub fn zero_grad(&mut self) {
         self.grads.clear();
     }
