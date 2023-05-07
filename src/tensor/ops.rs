@@ -1,4 +1,5 @@
 use super::*;
+use rayon::prelude::*;
 
 impl<V: TensorElement + std::ops::Add<Output = V>> Add for &Tensor<V> {
     type Output = Tensor<V>;
