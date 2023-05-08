@@ -48,22 +48,22 @@ fn main() {
 
     let (xs, ys) = mnist_images().unwrap();
 
-    let offset = 33000;
+    let offset = 0;
     let xs: Tensor<f32> = xs.get_slice(offset, 1000).into();
     let ys: Tensor<u32> = ys.get_slice(offset, 1000).into();
     println!("{:?}", xs.shape());
     println!("{:?}", ys.shape());
 
-    let samples = g.alloc(xs);
+    let samples = g.alloc_input(&[784]);
 
-    let lin1 = g.alloc(Tensor::<f32>::rand(&mut rng, &[784, 200]));
-    let lin1_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[200]));
-    let lin2 = g.alloc(Tensor::<f32>::rand(&mut rng, &[200, 100]));
-    let lin2_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[100]));
-    let lin3 = g.alloc(Tensor::<f32>::rand(&mut rng, &[100, 50]));
-    let lin3_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[50]));
-    let lin4 = g.alloc(Tensor::<f32>::rand(&mut rng, &[50, 10]));
-    let lin4_bias = g.alloc(Tensor::<f32>::rand(&mut rng, &[10]));
+    let lin1 = g.alloc_param(&[784, 200]);
+    let lin1_bias = g.alloc_param(&[200]);
+    let lin2 = g.alloc_param(&[200, 100]);
+    let lin2_bias = g.alloc_param(&[100]);
+    let lin3 = g.alloc_param(&[100, 50]);
+    let lin3_bias = g.alloc_param(&[50]);
+    let lin4 = g.alloc_param(&[50, 10]);
+    let lin4_bias = g.alloc_param(&[10]);
 
     let out1 = g.call(MatMul::new(), &[samples, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
@@ -78,9 +78,6 @@ fn main() {
     let out4_bias = g.call(Add::new(), &[out4, lin4_bias]);
     let out4_bias_sigm = g.call(Softmax::new(), &[out4_bias]);
 
-    let error = g.call(CrossEntropy::new(10, ys), &[out4_bias_sigm]);
-    let mean_error = g.call(Mean::new(), &[error]);
-
     let params = vec![
         lin1, lin2, lin3, lin4, lin1_bias, lin2_bias, lin3_bias, lin4_bias,
     ];
@@ -90,20 +87,21 @@ fn main() {
         let mut bytes = Vec::new();
         tensor_file.read_to_end(&mut bytes).unwrap();
         let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
-        g.load(*p, t);
+        g.load(*p, &t);
     }
 
     let mut opt = NaiveOptimizer::new(0.5);
     loop {
+        g.load(samples, &xs);
         g.forward();
         g.zero_grad();
-        g.backward_all(mean_error);
-        println!("{:?}", g.get(mean_error));
+        let err = g.backward_all(out4_bias_sigm, CrossEntropy::new(10, ys.clone()));
+        println!("{:?}", err);
 
-        for p in params.iter() {
+        /*for p in params.iter() {
             let data = bincode::serialize(g.get(*p)).unwrap();
             fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
-        }
+        }*/
 
         g.optimize(&mut opt, &params.iter().cloned().collect());
     }
