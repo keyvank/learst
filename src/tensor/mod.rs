@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub trait TensorElement: Clone + Copy + Sized {
     fn zero() -> Self;
     fn one() -> Self;
+    fn as_f32(self) -> f32;
 }
 impl TensorElement for f32 {
     fn zero() -> Self {
@@ -14,6 +15,9 @@ impl TensorElement for f32 {
     }
     fn one() -> Self {
         1.
+    }
+    fn as_f32(self) -> f32 {
+        self
     }
 }
 impl TensorElement for u32 {
@@ -23,6 +27,9 @@ impl TensorElement for u32 {
     fn one() -> Self {
         1
     }
+    fn as_f32(self) -> f32 {
+        self as f32
+    }
 }
 impl TensorElement for bool {
     fn zero() -> Self {
@@ -30,6 +37,13 @@ impl TensorElement for bool {
     }
     fn one() -> Self {
         true
+    }
+    fn as_f32(self) -> f32 {
+        if self {
+            1.0
+        } else {
+            0.0
+        }
     }
 }
 
@@ -136,6 +150,13 @@ impl<'a, V: 'a + TensorElement, T: TensorMutOps<V>> Iterator for TensorIterMut<'
 pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn blob_mut(&mut self) -> &mut [V];
     fn tensor_mut(&mut self) -> &mut Tensor<V>;
+
+    fn mean(&self) -> f32
+    where
+        V: std::iter::Sum,
+    {
+        self.blob().iter().cloned().sum::<V>().as_f32() / self.size() as f32
+    }
 
     fn view_mut(&mut self) -> TensorMutView<V> {
         TensorMutView {

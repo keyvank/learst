@@ -2,10 +2,10 @@ use learst::funcs::*;
 use learst::graph::Graph;
 use learst::optimizer::NaiveOptimizer;
 use learst::tensor::{Tensor, TensorMutOps, TensorOps};
-use rand::prelude::*;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::PathBuf;
 
 fn mnist_images() -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
     let mut img_file = File::open("train-images.idx3-ubyte")?;
@@ -42,17 +42,24 @@ fn xor_dataset() -> (Tensor<f32>, Tensor<u32>) {
     (xs, ys)
 }
 
+fn read_ppm(path: &PathBuf) -> std::io::Result<Tensor<f32>> {
+    let mut file = File::open(path)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let parts = bytes.split(|b| *b == b'\n').collect::<Vec<_>>();
+    let data = parts
+        .last()
+        .unwrap()
+        .chunks(3)
+        .map(|ch| (1. - ch.iter().map(|b| *b as f32 / 255. / 3.).sum::<f32>()))
+        .collect::<Vec<_>>();
+    Ok(Tensor::raw(&[1, 784], data))
+}
+
 fn main() {
-    let mut rng = thread_rng();
     let mut g = Graph::new();
 
     let (xs, ys) = mnist_images().unwrap();
-
-    let offset = 0;
-    let xs: Tensor<f32> = xs.get_slice(offset, 1000).into();
-    let ys: Tensor<u32> = ys.get_slice(offset, 1000).into();
-    println!("{:?}", xs.shape());
-    println!("{:?}", ys.shape());
 
     let samples = g.alloc_input(&[784]);
 
@@ -90,18 +97,31 @@ fn main() {
         g.load(*p, &t);
     }
 
-    let mut opt = NaiveOptimizer::new(0.5);
-    loop {
+    let mut opt = NaiveOptimizer::new(0.0001);
+    for epoch in 0..60 {
+        let handdrawn = read_ppm(&"Untitled.ppm".into()).unwrap();
+        g.load(samples, &handdrawn);
+        g.forward();
+        println!("{:?}", g.get(out4_bias_sigm));
+
+        println!(
+            "Train on image {} to {}...",
+            epoch * 1000,
+            epoch * 1000 + 1000
+        );
+        let xs: Tensor<f32> = xs.get_slice(epoch * 1000, 1000).into();
+        let ys: Tensor<u32> = ys.get_slice(epoch * 1000, 1000).into();
+
         g.load(samples, &xs);
         g.forward();
         g.zero_grad();
         let err = g.backward_all(out4_bias_sigm, CrossEntropy::new(10, ys.clone()));
-        println!("{:?}", err);
+        println!("Loss: {}", err.mean());
 
-        /*for p in params.iter() {
+        for p in params.iter() {
             let data = bincode::serialize(g.get(*p)).unwrap();
             fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
-        }*/
+        }
 
         g.optimize(&mut opt, &params.iter().cloned().collect());
     }
