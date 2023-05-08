@@ -1,4 +1,4 @@
-use super::{Function, Loss, Tensor, TensorMutOps, TensorOps};
+use super::{Loss, Tensor, TensorMutOps, TensorOps};
 
 pub struct CrossEntropy {
     classes: u32,

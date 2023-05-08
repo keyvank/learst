@@ -168,7 +168,7 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn fill(&mut self, v: V) {
         self.blob_mut().fill(v);
     }
-    fn shuffle<R: Rng>(&mut self, rng: R) {
+    fn shuffle<R: Rng>(&mut self, _rng: R) {
         unimplemented!();
     }
     fn set<T: TensorOps<V>>(&mut self, t: T) {
