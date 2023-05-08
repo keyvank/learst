@@ -1,4 +1,5 @@
 mod add;
+mod convolution;
 mod crossentropy;
 mod matmul;
 mod mean;
@@ -8,6 +9,7 @@ mod square;
 mod sub;
 
 pub use add::*;
+pub use convolution::*;
 pub use crossentropy::*;
 pub use matmul::*;
 pub use mean::*;

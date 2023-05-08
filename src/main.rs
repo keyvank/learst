@@ -56,7 +56,7 @@ fn read_ppm(path: &PathBuf) -> std::io::Result<Tensor<f32>> {
     Ok(Tensor::raw(&[1, 784], data))
 }
 
-fn main() {
+fn nn_mnist() {
     let mut g = Graph::new();
 
     let (xs, ys) = mnist_images().unwrap();
@@ -125,4 +125,13 @@ fn main() {
 
         g.optimize(&mut opt, &params.iter().cloned().collect());
     }
+}
+
+fn main() {
+    let mut g = Graph::new();
+
+    let inp = g.alloc_input(&[28, 28, 3]);
+    let lin1 = g.alloc_param(&[27, 5]);
+    let out = g.call(Convolution::new(3, 0, 3, 5), &[inp, lin1]);
+    println!("{:?}", g.get(out).shape());
 }
