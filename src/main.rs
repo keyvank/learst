@@ -133,5 +133,6 @@ fn main() {
     let inp = g.alloc_input(&[28, 28, 3]);
     let lin1 = g.alloc_param(&[27, 5]);
     let out = g.call(Convolution::new(3, 0, 3, 5), &[inp, lin1]);
+    g.backward_all(out, MeanSquaredError::new(Tensor::ones(&[1, 26, 26, 5])));
     println!("{:?}", g.get(out).shape());
 }

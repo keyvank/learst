@@ -57,9 +57,38 @@ impl Function for Convolution {
     fn grad(
         &self,
         inps: &[&Tensor<f32>],
-        _out: &Tensor<f32>,
+        out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
-        unimplemented!();
+        let inp0 = inps[0].map(3, |t| {
+            let height = t.shape()[0];
+            let width = t.shape()[1];
+            let chans = t.shape()[2];
+            let mut data = Vec::<f32>::new();
+            for ih in 0..height - self.kernel_size + 1 {
+                for iw in 0..width - self.kernel_size + 1 {
+                    for oh in ih..ih + self.kernel_size {
+                        for ow in iw..iw + self.kernel_size {
+                            data.extend(t.get(oh).get(ow).blob());
+                        }
+                    }
+                }
+            }
+            Tensor::<f32>::raw(
+                &[
+                    (height - self.kernel_size + 1) * (width - self.kernel_size + 1),
+                    chans * self.kernel_size * self.kernel_size,
+                ],
+                data,
+            )
+        });
+        let out_height = out.shape()[out.dim() - 3];
+        let out_width = out.shape()[out.dim() - 2];
+        let out_chans = out.shape()[out.dim() - 1];
+        let grad = &out
+            .reshape(&[0, out_height * out_width, out_chans])
+            .transpose()
+            ^ &inp0;
+        vec![Tensor::zeros(inps[0].shape()), grad]
     }
 }
