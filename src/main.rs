@@ -1,17 +1,20 @@
 use learst::funcs::*;
 use learst::graph::Graph;
 use learst::optimizer::NaiveOptimizer;
-use learst::tensor::{Tensor, TensorMutOps, TensorOps};
+use learst::tensor::{Tensor, TensorElement, TensorMutOps, TensorOps};
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 
-fn mnist_images() -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
-    let mut img_file = File::open("train-images.idx3-ubyte")?;
+fn mnist_images(
+    img_path: &PathBuf,
+    label_path: &PathBuf,
+) -> std::io::Result<(Tensor<f32>, Tensor<u32>)> {
+    let mut img_file = File::open(img_path)?;
     let mut img_bytes = Vec::new();
     img_file.read_to_end(&mut img_bytes)?;
-    let mut label_file = File::open("train-labels.idx1-ubyte")?;
+    let mut label_file = File::open(label_path)?;
     let mut label_bytes = Vec::new();
     label_file.read_to_end(&mut label_bytes)?;
 
@@ -59,7 +62,16 @@ fn read_ppm(path: &PathBuf) -> std::io::Result<Tensor<f32>> {
 fn nn_mnist() {
     let mut g = Graph::new();
 
-    let (xs, ys) = mnist_images().unwrap();
+    let (xs, ys) = mnist_images(
+        &"train-images.idx3-ubyte".into(),
+        &"train-labels.idx1-ubyte".into(),
+    )
+    .unwrap();
+    let (xs_test, ys_test) = mnist_images(
+        &"t10k-images.idx3-ubyte".into(),
+        &"t10k-labels.idx1-ubyte".into(),
+    )
+    .unwrap();
 
     let samples = g.alloc_input(&[784]);
 
@@ -97,12 +109,21 @@ fn nn_mnist() {
         g.load(*p, &t);
     }
 
-    let mut opt = NaiveOptimizer::new(0.0001);
+    let mut opt = NaiveOptimizer::new(0.001);
     for epoch in 0..60 {
-        let handdrawn = read_ppm(&"Untitled.ppm".into()).unwrap();
-        g.load(samples, &handdrawn);
+        g.load(samples, &xs_test);
         g.forward();
-        println!("{:?}", g.get(out4_bias_sigm));
+        let predictions = g.get(out4_bias_sigm).argmax();
+        println!(
+            "Accuracy: {}",
+            predictions
+                .equals(&ys_test)
+                .blob()
+                .iter()
+                .map(|v| v.as_f32())
+                .sum::<f32>()
+                / predictions.size() as f32
+        );
 
         println!(
             "Train on image {} to {}...",
@@ -128,11 +149,12 @@ fn nn_mnist() {
 }
 
 fn main() {
-    let mut g = Graph::new();
+    nn_mnist();
+    /*let mut g = Graph::new();
 
     let inp = g.alloc_input(&[28, 28, 3]);
     let lin1 = g.alloc_param(&[27, 5]);
     let out = g.call(Convolution::new(3, 0, 3, 5), &[inp, lin1]);
     g.backward_all(out, MeanSquaredError::new(Tensor::ones(&[1, 26, 26, 5])));
-    println!("{:?}", g.get(out).shape());
+    println!("{:?}", g.get(out).shape());*/
 }

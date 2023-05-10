@@ -240,6 +240,37 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> {
     fn tensor(&self) -> &Tensor<V>;
     fn offset(&self) -> usize;
 
+    fn equals<T2: TensorOps<V>>(&self, other: &T2) -> Tensor<bool>
+    where
+        V: PartialEq,
+    {
+        assert_eq!(self.shape(), other.shape());
+        let blob = self
+            .blob()
+            .iter()
+            .zip(other.blob().iter())
+            .map(|(a, b)| a == b)
+            .collect::<Vec<_>>();
+        Tensor::<bool>::raw(self.shape(), blob)
+    }
+
+    fn argmax(&self) -> Tensor<u32>
+    where
+        V: std::cmp::PartialOrd,
+    {
+        self.map(1, |l| {
+            let mut max_ind = 0;
+            let mut max = l.get(0).scalar();
+            for i in 1..l.len() {
+                if l.get(i).scalar() > max {
+                    max = l.get(i).scalar();
+                    max_ind = i;
+                }
+            }
+            Tensor::scalar(max_ind as u32)
+        })
+    }
+
     fn mapf<F: Fn(V) -> V>(&self, f: F) -> Tensor<V> {
         self.map(0, |t| Tensor::scalar(f(t.scalar())))
     }
