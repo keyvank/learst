@@ -74,15 +74,16 @@ fn nn_mnist() {
     .unwrap();
 
     let samples = g.alloc_input(&[784]);
+    let mut rng = rand::thread_rng();
 
-    let lin1 = g.alloc_param(&[784, 200]);
-    let lin1_bias = g.alloc_param(&[200]);
-    let lin2 = g.alloc_param(&[200, 100]);
-    let lin2_bias = g.alloc_param(&[100]);
-    let lin3 = g.alloc_param(&[100, 50]);
-    let lin3_bias = g.alloc_param(&[50]);
-    let lin4 = g.alloc_param(&[50, 10]);
-    let lin4_bias = g.alloc_param(&[10]);
+    let lin1 = g.alloc_param(&mut rng, &[784, 200]);
+    let lin1_bias = g.alloc_param(&mut rng, &[200]);
+    let lin2 = g.alloc_param(&mut rng, &[200, 100]);
+    let lin2_bias = g.alloc_param(&mut rng, &[100]);
+    let lin3 = g.alloc_param(&mut rng, &[100, 50]);
+    let lin3_bias = g.alloc_param(&mut rng, &[50]);
+    let lin4 = g.alloc_param(&mut rng, &[50, 10]);
+    let lin4_bias = g.alloc_param(&mut rng, &[10]);
 
     let out1 = g.call(MatMul::new(), &[samples, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
@@ -149,12 +150,55 @@ fn nn_mnist() {
 }
 
 fn main() {
-    nn_mnist();
-    /*let mut g = Graph::new();
+    //nn_mnist();
+    let mut rng = rand::thread_rng();
+    let mut g = Graph::new();
 
-    let inp = g.alloc_input(&[28, 28, 3]);
-    let lin1 = g.alloc_param(&[27, 5]);
-    let out = g.call(Convolution::new(3, 0, 3, 5), &[inp, lin1]);
-    g.backward_all(out, MeanSquaredError::new(Tensor::ones(&[1, 26, 26, 5])));
-    println!("{:?}", g.get(out).shape());*/
+    let (xs, ys) = mnist_images(
+        &"train-images.idx3-ubyte".into(),
+        &"train-labels.idx1-ubyte".into(),
+    )
+    .unwrap();
+    let batch_size = 10;
+
+    let inp = g.alloc_input(&[1, 28, 28]);
+    let conv1 = g.alloc_param(&mut rng, &[5, 1, 3, 3]);
+    let conv2 = g.alloc_param(&mut rng, &[10, 5, 3, 3]);
+    let conv3 = g.alloc_param(&mut rng, &[20, 10, 3, 3]);
+    let lin = g.alloc_param(&mut rng, &[9680, 10]);
+    let lin_bias = g.alloc_param(&mut rng, &[10]);
+    let out1 = g.call(Convolution::new(3, 0, 3, 5), &[inp, conv1]);
+    let sigm1 = g.call(Sigmoid::new(), &[out1]);
+    let out2 = g.call(Convolution::new(3, 0, 3, 5), &[sigm1, conv2]);
+    let sigm2 = g.call(Sigmoid::new(), &[out2]);
+    let out3 = g.call(Convolution::new(3, 0, 3, 5), &[sigm2, conv3]);
+    let sigm3 = g.call(Sigmoid::new(), &[out3]);
+    let flat = g.call(Flatten::new(), &[sigm3]);
+    let out = g.call(MatMul::new(), &[flat, lin]);
+    let out_bias = g.call(Add::new(), &[out, lin_bias]);
+    let out_bias_sigm = g.call(Sigmoid::new(), &[out_bias]);
+    let out_bias_soft = g.call(Softmax::new(), &[out_bias_sigm]);
+    let params = vec![conv1, conv2, conv3, lin, lin_bias];
+    let mut opt = NaiveOptimizer::new(1.);
+    loop {
+        for epoch in 0..1 {
+            let xs: Tensor<f32> = xs
+                .get_slice(epoch * batch_size, batch_size)
+                .reshape(&[batch_size, 1, 28, 28])
+                .into();
+            let ys: Tensor<u32> = ys
+                .get_slice(epoch * batch_size, batch_size)
+                .reshape(&[batch_size])
+                .into();
+
+            g.load(inp, &xs);
+            g.forward();
+            g.zero_grad();
+            let err = g.backward_all(out_bias_soft, CrossEntropy::new(10, ys.clone()));
+            println!("Loss: {}", err.mean());
+
+            g.optimize(&mut opt, &params.iter().cloned().collect());
+        }
+    }
+    //println!("{:?}", g.get(out).shape());
 }

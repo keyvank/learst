@@ -1,6 +1,7 @@
 use crate::funcs::{Function, Loss};
 use crate::optimizer::Optimizer;
 use crate::tensor::*;
+use rand::Rng;
 use std::collections::{HashMap, HashSet};
 
 pub type TensorId = usize;
@@ -43,7 +44,7 @@ impl Graph {
             next_tensor_id: Default::default(),
         }
     }
-    pub fn alloc_param(&mut self, shape: &[usize]) -> TensorId {
+    pub fn alloc_param<R: Rng>(&mut self, rng: &mut R, shape: &[usize]) -> TensorId {
         let id = self.next_tensor_id;
         self.info.insert(
             id,
@@ -52,7 +53,7 @@ impl Graph {
                 shape: shape.to_vec(),
             },
         );
-        self.tensors.insert(id, Tensor::<f32>::zeros(shape));
+        self.tensors.insert(id, Tensor::<f32>::rand(rng, shape));
         self.next_tensor_id += 1;
         id
     }
@@ -153,6 +154,7 @@ impl Graph {
     pub fn backward_all(&mut self, id: TensorId, loss_fn: Box<dyn Loss>) -> Tensor<f32> {
         let output = self.get(id);
         let loss = loss_fn.run(&output);
+        println!("{:?}", loss);
 
         let grad = loss_fn.grad(output, &loss);
         self.add_grad(id, grad);

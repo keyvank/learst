@@ -468,6 +468,8 @@ impl<V: TensorElement> TensorOps<V> for TensorView<'_, V> {
 
 impl<V: TensorElement> Tensor<V> {
     pub fn raw(shape: &[usize], blob: Vec<V>) -> Self {
+        let sz = shape.iter().fold(1, |c, s| c * s);
+        assert_eq!(sz, blob.len());
         Self {
             blob,
             shape: shape.to_vec(),
@@ -554,6 +556,7 @@ fn combine_shapes(a: &[usize], b: &[usize]) -> Vec<usize> {
                 } else if b == 1 {
                     a
                 } else {
+                    println!("{:?} {:?}", a, b);
                     panic!("Cannot be combined!")
                 }
             },
