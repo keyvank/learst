@@ -168,11 +168,11 @@ fn main() {
     let lin = g.alloc_param(&mut rng, &[9680, 10]);
     let lin_bias = g.alloc_param(&mut rng, &[10]);
     let out1 = g.call(Convolution::new(3, 0, 3, 5), &[inp, conv1]);
-    let sigm1 = g.call(Sigmoid::new(), &[out1]);
+    let sigm1 = g.call(Relu::new(), &[out1]);
     let out2 = g.call(Convolution::new(3, 0, 3, 5), &[sigm1, conv2]);
-    let sigm2 = g.call(Sigmoid::new(), &[out2]);
+    let sigm2 = g.call(Relu::new(), &[out2]);
     let out3 = g.call(Convolution::new(3, 0, 3, 5), &[sigm2, conv3]);
-    let sigm3 = g.call(Sigmoid::new(), &[out3]);
+    let sigm3 = g.call(Relu::new(), &[out3]);
     let flat = g.call(Flatten::new(), &[sigm3]);
     let out = g.call(MatMul::new(), &[flat, lin]);
     let out_bias = g.call(Add::new(), &[out, lin_bias]);
