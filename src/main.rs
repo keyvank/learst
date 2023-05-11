@@ -159,7 +159,17 @@ fn main() {
         &"train-labels.idx1-ubyte".into(),
     )
     .unwrap();
-    let batch_size = 10;
+    let (xs_test, ys_test) = mnist_images(
+        &"t10k-images.idx3-ubyte".into(),
+        &"t10k-labels.idx1-ubyte".into(),
+    )
+    .unwrap();
+    let xs_test: Tensor<f32> = xs_test
+        .get_slice(0, 1000)
+        .reshape(&[1000, 1, 28, 28])
+        .into();
+    let ys_test: Tensor<u32> = ys_test.get_slice(0, 1000).reshape(&[1000]).into();
+    let batch_size = 1000;
 
     let inp = g.alloc_input(&[1, 28, 28]);
     let conv1 = g.alloc_param(&mut rng, &[5, 1, 3, 3]);
@@ -178,9 +188,30 @@ fn main() {
     let out_bias_sigm = g.call(Sigmoid::new(), &[out_bias]);
     let out_bias_soft = g.call(Softmax::new(), &[out_bias_sigm]);
     let params = vec![conv1, conv2, lin, lin_bias];
-    let mut opt = NaiveOptimizer::new(0.00001);
+    for p in params.iter() {
+        let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
+        let mut bytes = Vec::new();
+        tensor_file.read_to_end(&mut bytes).unwrap();
+        let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
+        g.load(*p, &t);
+    }
+    let mut opt = NaiveOptimizer::new(0.02);
     loop {
-        for epoch in 0..1 {
+        for epoch in 0..60 {
+            g.load(inp, &xs_test);
+            g.forward();
+            let predictions = g.get(out_bias_sigm).argmax();
+            println!(
+                "Accuracy: {}",
+                predictions
+                    .equals(&ys_test)
+                    .blob()
+                    .iter()
+                    .map(|v| v.as_f32())
+                    .sum::<f32>()
+                    / predictions.size() as f32
+            );
+
             let xs: Tensor<f32> = xs
                 .get_slice(epoch * batch_size, batch_size)
                 .reshape(&[batch_size, 1, 28, 28])
@@ -195,6 +226,10 @@ fn main() {
             g.zero_grad();
             let err = g.backward_all(out_bias_soft, CrossEntropy::new(10, ys.clone()));
             println!("Loss: {}", err.mean());
+            for p in params.iter() {
+                let data = bincode::serialize(g.get(*p)).unwrap();
+                fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
+            }
 
             g.optimize(&mut opt, &params.iter().cloned().collect());
         }
