@@ -154,7 +154,6 @@ impl Graph {
     pub fn backward_all(&mut self, id: TensorId, loss_fn: Box<dyn Loss>) -> Tensor<f32> {
         let output = self.get(id);
         let loss = loss_fn.run(&output);
-        println!("{:?}", loss);
 
         let grad = loss_fn.grad(output, &loss);
         self.add_grad(id, grad);

@@ -164,12 +164,12 @@ fn main() {
     let inp = g.alloc_input(&[1, 28, 28]);
     let conv1 = g.alloc_param(&mut rng, &[5, 1, 3, 3]);
     let conv2 = g.alloc_param(&mut rng, &[10, 5, 3, 3]);
-    let lin = g.alloc_param(&mut rng, &[250, 10]);
+    let lin = g.alloc_param(&mut rng, &[490, 10]);
     let lin_bias = g.alloc_param(&mut rng, &[10]);
-    let out1 = g.call(Convolution::new(3, 0, 3, 5), &[inp, conv1]);
+    let out1 = g.call(Convolution::new(3, 1, 3, 5), &[inp, conv1]);
     let sigm1 = g.call(Relu::new(), &[out1]);
     let max1 = g.call(MaxPool::new(2), &[sigm1]);
-    let out2 = g.call(Convolution::new(3, 0, 3, 5), &[max1, conv2]);
+    let out2 = g.call(Convolution::new(3, 1, 3, 5), &[max1, conv2]);
     let sigm2 = g.call(Relu::new(), &[out2]);
     let max2 = g.call(MaxPool::new(2), &[sigm2]);
     let flat = g.call(Flatten::new(), &[max2]);
@@ -178,7 +178,7 @@ fn main() {
     let out_bias_sigm = g.call(Sigmoid::new(), &[out_bias]);
     let out_bias_soft = g.call(Softmax::new(), &[out_bias_sigm]);
     let params = vec![conv1, conv2, lin, lin_bias];
-    let mut opt = NaiveOptimizer::new(1.);
+    let mut opt = NaiveOptimizer::new(0.00001);
     loop {
         for epoch in 0..1 {
             let xs: Tensor<f32> = xs

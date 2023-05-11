@@ -95,7 +95,9 @@ pub fn conv<T1: TensorOps<f32>, T2: TensorOps<f32>>(
 
 impl Function for Convolution {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
-        inps[0].map(3, |t| inps[1].map(3, |f| apply_filter(&t, &f, 0, 1, 0)))
+        inps[0].map(3, |t| {
+            inps[1].map(3, |f| apply_filter(&t, &f, self.padding, 1, 0))
+        })
     }
     fn grad(
         &self,
@@ -112,7 +114,7 @@ impl Function for Convolution {
         for (imgs, fils) in inps[0].iter().zip(out_grad.iter()) {
             for (_, fil) in fils.iter().enumerate() {
                 for (_, img) in imgs.iter().enumerate() {
-                    grad_data.extend(conv(&img, &fil, 0, 1, 0).blob());
+                    grad_data.extend(conv(&img, &fil, self.padding, 1, 0).blob());
                 }
             }
         }

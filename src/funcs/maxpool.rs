@@ -44,8 +44,8 @@ impl Function for MaxPool {
         let mut blob = Vec::new();
         for (img, out_grad) in inps[0].iter().zip(out_grad.iter()) {
             for (img_chans, out_chans) in img.iter().zip(out_grad.iter()) {
-                let final_height = img.shape()[0] / self.kernel_size;
-                let final_width = img.shape()[1] / self.kernel_size;
+                let final_height = img_chans.shape()[0] / self.kernel_size;
+                let final_width = img_chans.shape()[1] / self.kernel_size;
                 for h in 0..final_height {
                     for w in 0..final_width {
                         let out = out_chans.get(h).get(w).scalar();
