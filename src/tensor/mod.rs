@@ -57,7 +57,7 @@ pub struct Tensor<V: TensorElement> {
 unsafe impl<V: TensorElement> Send for Tensor<V> {}
 unsafe impl<V: TensorElement> Sync for Tensor<V> {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TensorView<'a, V: TensorElement> {
     mirror: &'a Tensor<V>,
     offset: usize,

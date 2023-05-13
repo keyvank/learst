@@ -268,13 +268,88 @@ fn xor() {
         g.optimize(&mut opt, &params.iter().cloned().collect());
     }
 }
+use rand::Rng;
+
+fn text_dataset<R: Rng>(
+    batch_size: usize,
+    context_size: usize,
+    rng: &mut R,
+) -> (Tensor<u32>, Tensor<u32>) {
+    let alpha = "abcdefghijklmnopqrstuvwxyz"
+        .chars()
+        .map(|c| (c as u32) - 97)
+        .collect::<Vec<_>>();
+
+    let mut xs: Vec<u32> = Vec::new();
+    let mut ys: Vec<u32> = Vec::new();
+    for i in 0..batch_size {
+        let start: usize = rng.gen_range(0..alpha.len());
+        let all = alpha
+            .iter()
+            .cycle()
+            .skip(start)
+            .take(context_size + 1)
+            .cloned()
+            .collect::<Vec<_>>();
+        xs.extend(&all[0..context_size]);
+        ys.extend(&all[1..context_size + 1]);
+    }
+
+    (
+        Tensor::raw(&[batch_size, context_size], xs),
+        Tensor::raw(&[batch_size, context_size], ys),
+    )
+}
+
+fn embed(s: &Tensor<u32>, embedding: &Tensor<f32>) -> Tensor<f32> {
+    s.map(0, |s| embedding.get(s.scalar() as usize).into())
+}
+
+fn unembed(s: &Tensor<u32>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>) -> Tensor<f32> {
+    let degree = s_result.shape()[s_result.dim() - 1];
+    for (ch, embed) in s
+        .blob()
+        .iter()
+        .zip(s_result.reshape(&[0, degree]).inners().iter())
+    {
+        let mut t = embedding.get_mut(*ch as usize);
+        t.set(embed.clone());
+    }
+    Tensor::scalar(0.)
+}
 
 fn main() {
     let mut rng = rand::thread_rng();
+
     let mut g = Graph::new();
 
+    let batch_size = 10;
+    let num_tokens = 10;
     let vocab_size = 26;
     let embedding_degree = 50;
 
-    let _embedding = g.alloc_param(&mut rng, &[vocab_size, embedding_degree]);
+    let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
+
+    let inp = g.alloc_input(&[num_tokens, embedding_degree]);
+    let lin1 = g.alloc_param(&mut rng, &[embedding_degree, 20]);
+    let lin1_bias = g.alloc_param(&mut rng, &[20]);
+    let lin2 = g.alloc_param(&mut rng, &[20, vocab_size]);
+    let lin2_bias = g.alloc_param(&mut rng, &[vocab_size]);
+    let out1 = g.call(MatMul::new(), &[inp, lin1]);
+    let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
+    let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
+    let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
+    let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
+    let params = vec![inp, lin1, lin1_bias, lin2, lin2_bias];
+    let mut opt = NaiveOptimizer::new(0.01);
+    loop {
+        let (xs, ys) = text_dataset(batch_size, num_tokens, &mut rng);
+        g.load(inp, &embed(&xs, &embedding));
+        g.forward();
+        g.zero_grad();
+        let err = g.backward_all(out2_bias, CrossEntropy::new(vocab_size as u32, ys.clone()));
+        println!("Loss: {}", err.mean());
+        g.optimize(&mut opt, &params.iter().cloned().collect());
+        unembed(&xs, g.get(inp), &mut embedding);
+    }
 }
