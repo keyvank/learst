@@ -18,10 +18,15 @@ impl Loss for CrossEntropy {
         for ((mut r, o), t) in out
             .reshape_mut(&[0])
             .iter_mut()
-            .zip(inp.reshape(&[0, self.classes as usize]).iter())
-            .zip(self.target.reshape(&[0]).iter())
+            .zip(inp.reshape(&[0, self.classes as usize]).inners().iter())
+            .zip(self.target.reshape(&[0]).inners().iter())
         {
-            let sum = o.mapf(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
+            let sum = o
+                .mapf(|f| f.exp())
+                .inners()
+                .iter()
+                .map(|t| t.scalar())
+                .sum::<f32>();
             r.set(Tensor::scalar(
                 sum.ln() - o.get(t.scalar() as usize).scalar(),
             ));
@@ -33,10 +38,15 @@ impl Loss for CrossEntropy {
         for ((mut r, o), t) in result
             .reshape_mut(&[0, self.classes as usize])
             .iter_mut()
-            .zip(inp.reshape(&[0, self.classes as usize]).iter())
-            .zip(self.target.reshape(&[0]).iter())
+            .zip(inp.reshape(&[0, self.classes as usize]).inners().iter())
+            .zip(self.target.reshape(&[0]).inners().iter())
         {
-            let sum = o.mapf(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
+            let sum = o
+                .mapf(|f| f.exp())
+                .inners()
+                .iter()
+                .map(|t| t.scalar())
+                .sum::<f32>();
 
             for c in 0..self.classes as usize {
                 let val = o.get(c).scalar().exp();

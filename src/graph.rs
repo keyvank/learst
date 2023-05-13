@@ -101,8 +101,8 @@ impl Graph {
         let grad = self.grads.entry(id).or_insert(Tensor::zeros(&shape));
         if add.dim() >= shape.len() {
             shape.insert(0, 0);
-            for t in add.reshape(&shape).iter() {
-                *grad = &*grad + &t;
+            for t in add.reshape(&shape).inners().iter() {
+                *grad = &*grad + t;
             }
         } else {
             *grad = &*grad + &add.view();

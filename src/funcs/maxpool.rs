@@ -42,8 +42,8 @@ impl Function for MaxPool {
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         let mut blob = Vec::new();
-        for (img, out_grad) in inps[0].iter().zip(out_grad.iter()) {
-            for (img_chans, out_chans) in img.iter().zip(out_grad.iter()) {
+        for (img, out_grad) in inps[0].inners().iter().zip(out_grad.inners().iter()) {
+            for (img_chans, out_chans) in img.inners().iter().zip(out_grad.inners().iter()) {
                 let final_height = img_chans.shape()[0] / self.kernel_size;
                 let final_width = img_chans.shape()[1] / self.kernel_size;
                 for h in 0..final_height {

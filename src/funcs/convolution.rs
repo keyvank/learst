@@ -33,8 +33,8 @@ pub fn apply_filter<T1: TensorOps<f32>, T2: TensorOps<f32>>(
     assert_eq!(image.dim(), 3);
     assert_eq!(filter.dim(), 3);
     let mut result = Tensor::scalar(0.);
-    for (img, fil) in image.iter().zip(filter.iter()) {
-        let c = conv(&img, &fil, padding, stride, dilation);
+    for (img, fil) in image.inners().iter().zip(filter.inners().iter()) {
+        let c = conv(img, fil, padding, stride, dilation);
         result = &result + &c;
     }
     result
@@ -114,10 +114,10 @@ impl Function for Convolution {
         let filter_height = inps[1].shape()[2];
         let filter_width = inps[1].shape()[3];
         let mut grad_data = Vec::<f32>::new();
-        for (imgs, fils) in inps[0].iter().zip(out_grad.iter()) {
-            for (_, fil) in fils.iter().enumerate() {
-                for (_, img) in imgs.iter().enumerate() {
-                    grad_data.extend(conv(&img, &fil, self.padding, 1, 0).blob());
+        for (imgs, fils) in inps[0].inners().iter().zip(out_grad.inners().iter()) {
+            for (_, fil) in fils.inners().iter().enumerate() {
+                for (_, img) in imgs.inners().iter().enumerate() {
+                    grad_data.extend(conv(img, fil, self.padding, 1, 0).blob());
                 }
             }
         }

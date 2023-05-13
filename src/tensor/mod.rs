@@ -103,25 +103,6 @@ pub struct TensorMutView<'a, V: TensorElement> {
     shape: Vec<usize>,
 }
 
-pub struct TensorIter<'a, V: TensorElement, T: TensorOps<V>> {
-    target: &'a T,
-    index: usize,
-    _value_type: std::marker::PhantomData<V>,
-}
-impl<'a, V: 'a + TensorElement, T: TensorOps<V>> Iterator for TensorIter<'a, V, T> {
-    type Item = TensorView<'a, V>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let ret = if self.index < self.target.len() {
-            Some(self.target.get(self.index))
-        } else {
-            None
-        };
-        self.index += 1;
-        ret
-    }
-}
-
 pub struct TensorIterMut<'a, V: TensorElement, T: TensorMutOps<V>> {
     target: &'a mut T,
     index: usize,
@@ -286,8 +267,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         reshape.extend(&inp_shape);
         let blob = self
             .reshape(&reshape)
-            .iter()
-            .collect::<Vec<_>>()
+            .inners()
             .into_par_iter()
             .map(|v| f(v))
             .collect::<Vec<_>>();
@@ -307,12 +287,8 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
             panic!("Tensor is not a scalar!")
         }
     }
-    fn iter<'a>(&'a self) -> TensorIter<'a, V, Self> {
-        TensorIter {
-            target: self,
-            index: 0,
-            _value_type: std::marker::PhantomData::<V>,
-        }
+    fn inners<'a>(&'a self) -> Vec<TensorView<'a, V>> {
+        (0..self.len()).map(|i| self.get(i)).collect::<Vec<_>>()
     }
     fn dim(&self) -> usize {
         self.shape().len()
@@ -391,7 +367,11 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         for (mut dst, src) in t
             .reshape_mut(&[0, shape[dim - 2], shape[dim - 1]])
             .iter_mut()
-            .zip(self.reshape(&[0, shape[dim - 1], shape[dim - 2]]).iter())
+            .zip(
+                self.reshape(&[0, shape[dim - 1], shape[dim - 2]])
+                    .inners()
+                    .iter(),
+            )
         {
             for i in 0..shape[dim - 2] {
                 for j in 0..shape[dim - 1] {

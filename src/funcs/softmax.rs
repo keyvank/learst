@@ -10,7 +10,12 @@ impl Function for Softmax {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map(1, |l| {
-            let sum = l.mapf(|f| f.exp()).iter().map(|t| t.scalar()).sum::<f32>();
+            let sum = l
+                .mapf(|f| f.exp())
+                .inners()
+                .iter()
+                .map(|t| t.scalar())
+                .sum::<f32>();
             l.mapf(|f| f.exp() / sum)
         })
     }
