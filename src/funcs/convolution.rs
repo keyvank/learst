@@ -1,4 +1,5 @@
 use super::{Function, Tensor, TensorOps};
+use rayon::prelude::*;
 
 pub struct Convolution {
     kernel_size: usize,
@@ -61,9 +62,11 @@ pub fn conv<T1: TensorOps<f32>, T2: TensorOps<f32>>(
     assert_eq!(result_height * stride, exp_result_height);
     assert_eq!(result_width * stride, exp_result_width);
 
-    let mut data = Vec::<f32>::new();
-    for ih in 0..result_height {
-        for iw in 0..result_width {
+    let data = (0..result_height * result_width)
+        .into_par_iter()
+        .map(|work_id| {
+            let ih = work_id / result_width;
+            let iw = work_id % result_width;
             let start_h = (ih * stride) as isize - padding as isize;
             let start_w = (iw * stride) as isize - padding as isize;
             let mut sum = 0.;
@@ -87,9 +90,9 @@ pub fn conv<T1: TensorOps<f32>, T2: TensorOps<f32>>(
                     sum += value * kernel.get(fh).get(fw).scalar();
                 }
             }
-            data.push(sum);
-        }
-    }
+            sum
+        })
+        .collect::<Vec<f32>>();
     Tensor::raw(&[result_height, result_width], data)
 }
 
