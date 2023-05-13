@@ -5,7 +5,7 @@ pub use ops::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-pub trait TensorElement: Clone + Copy + Sized {
+pub trait TensorElement: Clone + Copy + Sized + Send + Sync {
     fn zero() -> Self;
     fn one() -> Self;
     fn as_f32(self) -> f32;
@@ -254,7 +254,10 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     }
 
     fn mapf<F: Fn(V) -> V + Sync + Send>(&self, f: F) -> Tensor<V> {
-        self.map(0, |t| Tensor::scalar(f(t.scalar())))
+        Tensor {
+            blob: self.blob().par_iter().map(|v| f(*v)).collect::<Vec<_>>(),
+            shape: self.shape().to_vec(),
+        }
     }
 
     fn map<W: TensorElement, F: Fn(TensorView<V>) -> Tensor<W> + Sync + Send>(
