@@ -235,7 +235,7 @@ impl<V: TensorElement> From<TensorMutView<'_, V>> for Tensor<V> {
     }
 }
 
-pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> {
+pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     fn shape(&self) -> &[usize];
     fn blob(&self) -> &[V];
     fn tensor(&self) -> &Tensor<V>;
