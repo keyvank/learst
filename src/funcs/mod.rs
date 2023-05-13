@@ -1,6 +1,7 @@
 mod add;
 mod convolution;
 mod crossentropy;
+mod dropout;
 mod flatten;
 mod matmul;
 mod maxpool;
@@ -15,6 +16,7 @@ mod sub;
 pub use add::*;
 pub use convolution::*;
 pub use crossentropy::*;
+pub use dropout::*;
 pub use flatten::*;
 pub use matmul::*;
 pub use maxpool::*;
