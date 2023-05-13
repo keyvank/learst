@@ -12,6 +12,7 @@ mod sigmoid;
 mod softmax;
 mod square;
 mod sub;
+mod transpose;
 
 pub use add::*;
 pub use convolution::*;
@@ -27,6 +28,7 @@ pub use sigmoid::*;
 pub use softmax::*;
 pub use square::*;
 pub use sub::*;
+pub use transpose::*;
 
 use super::tensor::*;
 
