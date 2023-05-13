@@ -487,10 +487,10 @@ impl<V: TensorElement> Tensor<V> {
             shape: shape.to_vec(),
         }
     }
-    pub fn iden(n: usize) -> Self {
+    pub fn tril(n: usize) -> Self {
         Tensor {
             blob: (0..n * n)
-                .map(|i| if i / n == i % n { V::one() } else { V::zero() })
+                .map(|i| if i % n <= i / n { V::one() } else { V::zero() })
                 .collect(),
             shape: vec![n, n],
         }
@@ -520,6 +520,46 @@ impl<V: TensorElement> Tensor<V> {
                 .collect(),
             shape: shape.to_vec(),
         }
+    }
+    pub fn cat<T: TensorOps<V>>(inps: &[&T]) -> Self {
+        let shape = inps
+            .get(0)
+            .expect("No tensors to be concatenated!")
+            .shape()
+            .to_vec();
+        inps.iter().all(|t| t.shape() == shape);
+        let each_sz = inps.get(0).unwrap().size();
+        let group_size = shape.last().unwrap();
+        let mut offset = 0;
+        let mut data: Vec<V> = Vec::new();
+
+        while offset < each_sz {
+            for inp in inps {
+                data.extend(&inp.blob()[offset..offset + group_size]);
+            }
+            offset += group_size;
+        }
+
+        let mut target_shape = shape.clone();
+        target_shape[shape.len() - 1] = target_shape[shape.len() - 1] * inps.len();
+        Tensor::raw(&target_shape, data)
+    }
+    pub fn split<T: TensorOps<V>>(inp: &T, cnt: usize) -> Vec<Tensor<V>> {
+        let group_size = inp.shape().last().unwrap() / cnt;
+        let mut result = vec![Vec::<V>::new(); cnt];
+        let mut offset = 0;
+        while offset < inp.size() {
+            for i in 0..cnt {
+                result[i].extend(&inp.blob()[offset..offset + group_size]);
+                offset += group_size;
+            }
+        }
+        let mut target_shape = inp.shape().to_vec();
+        target_shape[inp.dim() - 1] = target_shape[inp.dim() - 1] / cnt;
+        result
+            .into_iter()
+            .map(|d| Tensor::raw(&target_shape, d))
+            .collect()
     }
 }
 

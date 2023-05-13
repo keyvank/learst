@@ -1,4 +1,5 @@
 mod add;
+mod cat;
 mod convolution;
 mod crossentropy;
 mod dropout;
@@ -15,6 +16,7 @@ mod sub;
 mod transpose;
 
 pub use add::*;
+pub use cat::*;
 pub use convolution::*;
 pub use crossentropy::*;
 pub use dropout::*;

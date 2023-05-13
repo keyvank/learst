@@ -1,5 +1,5 @@
 use learst::funcs::*;
-use learst::graph::Graph;
+use learst::graph::{Graph, TensorId};
 use learst::optimizer::NaiveOptimizer;
 use learst::tensor::{Tensor, TensorElement, TensorMutOps, TensorOps};
 use std::fs;
@@ -328,13 +328,40 @@ fn main() {
     let vocab_size = 26;
     let embedding_degree = 50;
 
+    let num_heads = 2;
+    let head_size = 25;
+
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
 
-    let inp = g.alloc_input(&[num_tokens, embedding_degree]);
-    let lin1 = g.alloc_param(&mut rng, &[embedding_degree, 20]);
+    let inp = g.alloc_input(&[num_tokens, num_tokens]);
+
+    let mut params: Vec<TensorId> = Vec::new();
+
+    let mut heads = Vec::new();
+    for i in 0..num_heads {
+        let k_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
+        let q_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
+        let v_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
+        params.extend(&[k_params, q_params, v_params]);
+        let k = g.call(MatMul::new(), &[inp, k_params]);
+        let q = g.call(MatMul::new(), &[inp, q_params]);
+        let v = g.call(MatMul::new(), &[inp, v_params]);
+        let q_T = g.call(Transpose::new(), &[q]);
+        let kq = g.call(MatMul::new(), &[k, q_T]);
+        let atten = g.call(MatMul::new(), &[kq, v]);
+        heads.push(atten);
+    }
+    let catted = Tensor::cat(&heads.iter().map(|id| g.get(*id)).collect::<Vec<_>>());
+    println!("{:?}", catted.shape());
+    let uncatted = Tensor::split(&catted, heads.len());
+    for un in uncatted {
+        println!("{:?}", un.shape());
+    }
+    /*let lin1 = g.alloc_param(&mut rng, &[embedding_degree, 20]);
     let lin1_bias = g.alloc_param(&mut rng, &[20]);
     let lin2 = g.alloc_param(&mut rng, &[20, vocab_size]);
     let lin2_bias = g.alloc_param(&mut rng, &[vocab_size]);
+    let flat = g.call(Flatten::new(), &[inp]);
     let out1 = g.call(MatMul::new(), &[inp, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
     let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
@@ -351,5 +378,5 @@ fn main() {
         println!("Loss: {}", err.mean());
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(inp), &mut embedding);
-    }
+    }*/
 }
