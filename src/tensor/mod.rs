@@ -2,6 +2,7 @@ use rand::prelude::*;
 use std::ops::*;
 mod ops;
 pub use ops::*;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub trait TensorElement: Clone + Copy + Sized {
@@ -271,11 +272,11 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> {
         })
     }
 
-    fn mapf<F: Fn(V) -> V>(&self, f: F) -> Tensor<V> {
+    fn mapf<F: Fn(V) -> V + Sync + Send>(&self, f: F) -> Tensor<V> {
         self.map(0, |t| Tensor::scalar(f(t.scalar())))
     }
 
-    fn map<W: TensorElement, F: Fn(TensorView<V>) -> Tensor<W>>(
+    fn map<W: TensorElement, F: Fn(TensorView<V>) -> Tensor<W> + Sync + Send>(
         &self,
         dim: usize,
         f: F,
@@ -286,6 +287,8 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> {
         let blob = self
             .reshape(&reshape)
             .iter()
+            .collect::<Vec<_>>()
+            .into_par_iter()
             .map(|v| f(v))
             .collect::<Vec<_>>();
         assert!(blob.iter().all(|t| t.shape() == blob[0].shape()));
