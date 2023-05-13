@@ -164,11 +164,8 @@ fn main() {
         &"t10k-labels.idx1-ubyte".into(),
     )
     .unwrap();
-    let xs_test: Tensor<f32> = xs_test
-        .get_slice(0, 1000)
-        .reshape(&[1000, 1, 28, 28])
-        .into();
-    let ys_test: Tensor<u32> = ys_test.get_slice(0, 1000).reshape(&[1000]).into();
+    let xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
+    let ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
     let batch_size = 1000;
 
     let inp = g.alloc_input(&[1, 28, 28]);
@@ -176,10 +173,10 @@ fn main() {
     let conv2 = g.alloc_param(&mut rng, &[10, 5, 3, 3]);
     let lin = g.alloc_param(&mut rng, &[490, 10]);
     let lin_bias = g.alloc_param(&mut rng, &[10]);
-    let out1 = g.call(Convolution::new(3, 1, 3, 5), &[inp, conv1]);
+    let out1 = g.call(Convolution::new(3, 1, 1, 5), &[inp, conv1]);
     let sigm1 = g.call(Relu::new(), &[out1]);
     let max1 = g.call(MaxPool::new(2), &[sigm1]);
-    let out2 = g.call(Convolution::new(3, 1, 3, 5), &[max1, conv2]);
+    let out2 = g.call(Convolution::new(3, 1, 5, 10), &[max1, conv2]);
     let sigm2 = g.call(Relu::new(), &[out2]);
     let max2 = g.call(MaxPool::new(2), &[sigm2]);
     let flat = g.call(Flatten::new(), &[max2]);
@@ -195,12 +192,12 @@ fn main() {
         let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
         g.load(*p, &t);
     }
-    let mut opt = NaiveOptimizer::new(0.02);
+    let mut opt = NaiveOptimizer::new(0.001);
     loop {
-        for epoch in 0..60 {
+        for epoch in 0..10 {
             g.load(inp, &xs_test);
             g.forward();
-            let predictions = g.get(out_bias_sigm).argmax();
+            let predictions = g.get(out_bias).argmax();
             println!(
                 "Accuracy: {}",
                 predictions
