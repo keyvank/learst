@@ -40,8 +40,16 @@ fn mnist_images(
 }
 
 fn xor_dataset() -> (Tensor<f32>, Tensor<u32>) {
-    let xs = Tensor::<f32>::raw(&[4, 2], vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0]);
-    let ys = Tensor::<u32>::raw(&[4], vec![0, 1, 0, 1]);
+    let xs = Tensor::<f32>::raw(
+        &[16, 4],
+        vec![
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0,
+            1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+            0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+            0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0,
+        ],
+    );
+    let ys = Tensor::<u32>::raw(&[16], vec![0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]);
     (xs, ys)
 }
 
@@ -149,8 +157,7 @@ fn nn_mnist() {
     }
 }
 
-fn main() {
-    //nn_mnist();
+fn convo() {
     let mut rng = rand::thread_rng();
     let mut g = Graph::new();
 
@@ -166,7 +173,7 @@ fn main() {
     .unwrap();
     let xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
     let ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
-    let batch_size = 1000;
+    let batch_size = 10000;
 
     let inp = g.alloc_input(&[1, 28, 28]);
     let conv1 = g.alloc_param(&mut rng, &[5, 1, 3, 3]);
@@ -182,8 +189,6 @@ fn main() {
     let flat = g.call(Flatten::new(), &[max2]);
     let out = g.call(MatMul::new(), &[flat, lin]);
     let out_bias = g.call(Add::new(), &[out, lin_bias]);
-    let out_bias_sigm = g.call(Sigmoid::new(), &[out_bias]);
-    let out_bias_soft = g.call(Softmax::new(), &[out_bias_sigm]);
     let params = vec![conv1, conv2, lin, lin_bias];
     for p in params.iter() {
         let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
@@ -192,9 +197,9 @@ fn main() {
         let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
         g.load(*p, &t);
     }
-    let mut opt = NaiveOptimizer::new(0.001);
+    let mut opt = NaiveOptimizer::new(0.0001);
     loop {
-        for epoch in 0..10 {
+        for epoch in 0..60 {
             g.load(inp, &xs_test);
             g.forward();
             let predictions = g.get(out_bias).argmax();
@@ -221,7 +226,7 @@ fn main() {
             g.load(inp, &xs);
             g.forward();
             g.zero_grad();
-            let err = g.backward_all(out_bias_soft, CrossEntropy::new(10, ys.clone()));
+            let err = g.backward_all(out_bias, CrossEntropy::new(10, ys.clone()));
             println!("Loss: {}", err.mean());
             for p in params.iter() {
                 let data = bincode::serialize(g.get(*p)).unwrap();
@@ -231,5 +236,35 @@ fn main() {
             g.optimize(&mut opt, &params.iter().cloned().collect());
         }
     }
-    //println!("{:?}", g.get(out).shape());
+}
+
+fn main() {
+    let mut rng = rand::thread_rng();
+    let mut g = Graph::new();
+
+    let (xs, ys) = xor_dataset();
+
+    let inp = g.alloc_input(&[3]);
+    let lin1 = g.alloc_param(&mut rng, &[4, 1]);
+    let lin1_bias = g.alloc_param(&mut rng, &[1]);
+    let lin2 = g.alloc_param(&mut rng, &[1, 4]);
+    let lin2_bias = g.alloc_param(&mut rng, &[4]);
+    let out1 = g.call(MatMul::new(), &[inp, lin1]);
+    let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
+    let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
+    let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
+    let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
+    let mut opt = NaiveOptimizer::new(0.1);
+    let params = vec![lin1, lin2, lin1_bias, lin2_bias];
+
+    loop {
+        println!("{:?}", g.get(out1_bias_sigm));
+        println!("{:?}", g.get(out2_bias).argmax());
+        g.load(inp, &xs);
+        g.forward();
+        g.zero_grad();
+        let err = g.backward_all(out2_bias, CrossEntropy::new(4, ys.clone()));
+        println!("Loss: {}", err.mean());
+        g.optimize(&mut opt, &params.iter().cloned().collect());
+    }
 }
