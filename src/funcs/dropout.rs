@@ -1,4 +1,4 @@
-use super::{Function, Tensor, TensorOps};
+use super::{Function, Tensor};
 
 pub struct Dropout {
     rate: f32,
@@ -10,14 +10,14 @@ impl Dropout {
 }
 
 impl Function for Dropout {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&self, _inps: &[&Tensor<f32>]) -> Tensor<f32> {
         todo!()
     }
     fn grad(
         &self,
-        inps: &[&Tensor<f32>],
-        out: &Tensor<f32>,
-        out_grad: &Tensor<f32>,
+        _inps: &[&Tensor<f32>],
+        _out: &Tensor<f32>,
+        _out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         todo!()
     }

@@ -105,7 +105,7 @@ impl Function for Convolution {
     fn grad(
         &self,
         inps: &[&Tensor<f32>],
-        out: &Tensor<f32>,
+        _out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         let batch_size = out_grad.len();

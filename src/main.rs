@@ -238,7 +238,7 @@ fn convo() {
     }
 }
 
-fn main() {
+fn xor() {
     let mut rng = rand::thread_rng();
     let mut g = Graph::new();
 
@@ -267,4 +267,14 @@ fn main() {
         println!("Loss: {}", err.mean());
         g.optimize(&mut opt, &params.iter().cloned().collect());
     }
+}
+
+fn main() {
+    let mut rng = rand::thread_rng();
+    let mut g = Graph::new();
+
+    let vocab_size = 26;
+    let embedding_degree = 50;
+
+    let _embedding = g.alloc_param(&mut rng, &[vocab_size, embedding_degree]);
 }
