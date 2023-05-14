@@ -173,7 +173,7 @@ fn convo() {
     .unwrap();
     let xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
     let ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
-    let batch_size = 10000;
+    let batch_size = 100;
 
     let inp = g.alloc_input(&[1, 28, 28]);
     let conv1 = g.alloc_param(&mut rng, &[5, 1, 3, 3]);
@@ -183,10 +183,12 @@ fn convo() {
     let out1 = g.call(Convolution::new(3, 1, 1, 5), &[inp, conv1]);
     let sigm1 = g.call(Relu::new(), &[out1]);
     let max1 = g.call(MaxPool::new(2), &[sigm1]);
-    let out2 = g.call(Convolution::new(3, 1, 5, 10), &[max1, conv2]);
+    let norm1 = g.call(LayerNorm::new(2), &[max1]);
+    let out2 = g.call(Convolution::new(3, 1, 5, 10), &[norm1, conv2]);
     let sigm2 = g.call(Relu::new(), &[out2]);
     let max2 = g.call(MaxPool::new(2), &[sigm2]);
-    let flat = g.call(Flatten::new(), &[max2]);
+    let norm2 = g.call(LayerNorm::new(2), &[max2]);
+    let flat = g.call(Flatten::new(), &[norm2]);
     let out = g.call(MatMul::new(), &[flat, lin]);
     let out_bias = g.call(Add::new(), &[out, lin_bias]);
     let params = vec![conv1, conv2, lin, lin_bias];
@@ -197,10 +199,10 @@ fn convo() {
         let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
         g.load(*p, &t);
     }
-    let mut opt = NaiveOptimizer::new(0.0001);
+    let mut opt = NaiveOptimizer::new(0.001);
     loop {
-        for epoch in 0..60 {
-            g.load(inp, &xs_test);
+        for epoch in 0..600 {
+            /*g.load(inp, &xs_test);
             g.forward();
             let predictions = g.get(out_bias).argmax();
             println!(
@@ -212,7 +214,7 @@ fn convo() {
                     .map(|v| v.as_f32())
                     .sum::<f32>()
                     / predictions.size() as f32
-            );
+            );*/
 
             let xs: Tensor<f32> = xs
                 .get_slice(epoch * batch_size, batch_size)
@@ -258,8 +260,6 @@ fn xor() {
     let params = vec![lin1, lin2, lin1_bias, lin2_bias];
 
     loop {
-        println!("{:?}", g.get(out1_bias_sigm));
-        println!("{:?}", g.get(out2_bias).argmax());
         g.load(inp, &xs);
         g.forward();
         g.zero_grad();
@@ -318,7 +318,7 @@ fn unembed(s: &Tensor<u32>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>)
     Tensor::scalar(0.)
 }
 
-fn main() {
+fn gpt() {
     let mut rng = rand::thread_rng();
 
     let mut g = Graph::new();
@@ -385,4 +385,8 @@ fn main() {
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(inp), &mut embedding);
     }*/
+}
+
+fn main() {
+    convo();
 }
