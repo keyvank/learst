@@ -54,6 +54,12 @@ pub struct Tensor<V: TensorElement> {
     shape: Vec<usize>,
 }
 
+impl<T: TensorOps<bool>> From<&T> for Tensor<f32> {
+    fn from(v: &T) -> Self {
+        v.mapf(|v| v.as_f32())
+    }
+}
+
 unsafe impl<V: TensorElement> Send for Tensor<V> {}
 unsafe impl<V: TensorElement> Sync for Tensor<V> {}
 
@@ -253,7 +259,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         })
     }
 
-    fn mapf<F: Fn(V) -> V + Sync + Send>(&self, f: F) -> Tensor<V> {
+    fn mapf<W: TensorElement, F: Fn(V) -> W + Sync + Send>(&self, f: F) -> Tensor<W> {
         Tensor {
             blob: self.blob().par_iter().map(|v| f(*v)).collect::<Vec<_>>(),
             shape: self.shape().to_vec(),

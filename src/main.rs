@@ -351,7 +351,12 @@ fn main() {
             let v = g.call(MatMul::new(), &[inp, v_params]);
             let q_T = g.call(Transpose::new(), &[q]);
             let kq = g.call(MatMul::new(), &[k, q_T]);
-            let atten = g.call(MatMul::new(), &[kq, v]);
+            let masked_kq = g.call(
+                Mask::new(!&Tensor::<bool>::tril(num_tokens), f32::NEG_INFINITY),
+                &[kq],
+            );
+            let soft_masked_kq = g.call(Softmax::new(), &[masked_kq]);
+            let atten = g.call(MatMul::new(), &[soft_masked_kq, v]);
             heads.push(atten);
         }
         let cat = g.call(Cat::new(), &heads);

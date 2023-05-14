@@ -68,7 +68,10 @@ impl Graph {
         );
         let mut final_shape = shape.to_vec();
         final_shape.insert(0, 1);
-        self.tensors.insert(id, Tensor::<f32>::zeros(&final_shape));
+        self.tensors.insert(
+            id,
+            Tensor::<f32>::rand(&mut rand::thread_rng(), &final_shape),
+        );
         self.next_tensor_id += 1;
         id
     }

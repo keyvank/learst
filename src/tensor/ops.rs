@@ -214,3 +214,21 @@ impl<'a, V: TensorElement + std::ops::Neg<Output = V>> Neg for &TensorView<'a, V
         self.mapf(|f| -f)
     }
 }
+
+impl Not for &Tensor<bool> {
+    type Output = Tensor<bool>;
+
+    fn not(self) -> Self::Output {
+        !&self.view()
+    }
+}
+impl<'a> Not for &TensorView<'a, bool> {
+    type Output = Tensor<bool>;
+
+    fn not(self) -> Self::Output {
+        Tensor {
+            blob: self.blob().iter().map(|b| !b).collect(),
+            shape: self.shape().to_vec(),
+        }
+    }
+}
