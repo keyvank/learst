@@ -56,7 +56,7 @@ pub struct Tensor<V: TensorElement> {
 
 impl<T: TensorOps<bool>> From<&T> for Tensor<f32> {
     fn from(v: &T) -> Self {
-        v.mapf(|v| v.as_f32())
+        v.map_values(|v| v.as_f32())
     }
 }
 
@@ -179,7 +179,7 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
         if self.dim() == dims {
             new_shape.insert(0, 1);
         }
-        for i in 0..new_shape.len() - dims - 1 {
+        for _i in 0..new_shape.len() - dims - 1 {
             let rem = new_shape.remove(0);
             new_shape[0] *= rem;
         }
@@ -191,7 +191,7 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
         if self.dim() == dims {
             new_shape.push(1);
         }
-        for i in 0..new_shape.len() - dims - 1 {
+        for _i in 0..new_shape.len() - dims - 1 {
             let rem = new_shape.pop().unwrap();
             *new_shape.last_mut().unwrap() *= rem;
         }
@@ -256,7 +256,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         if self.dim() == dims {
             new_shape.insert(0, 1);
         }
-        for i in 0..new_shape.len() - dims - 1 {
+        for _i in 0..new_shape.len() - dims - 1 {
             let rem = new_shape.remove(0);
             new_shape[0] *= rem;
         }
@@ -268,7 +268,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         if self.dim() == dims {
             new_shape.push(1);
         }
-        for i in 0..new_shape.len() - dims - 1 {
+        for _i in 0..new_shape.len() - dims - 1 {
             let rem = new_shape.pop().unwrap();
             *new_shape.last_mut().unwrap() *= rem;
         }
@@ -306,7 +306,7 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         })
     }
 
-    fn mapf<W: TensorElement, F: Fn(V) -> W + Sync + Send>(&self, f: F) -> Tensor<W> {
+    fn map_values<W: TensorElement, F: Fn(V) -> W + Sync + Send>(&self, f: F) -> Tensor<W> {
         Tensor {
             blob: self.blob().par_iter().map(|v| f(*v)).collect::<Vec<_>>(),
             shape: self.shape().to_vec(),

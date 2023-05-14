@@ -29,7 +29,7 @@ impl Function for Mask {
     }
     fn grad(
         &self,
-        inps: &[&Tensor<f32>],
+        _inps: &[&Tensor<f32>],
         _out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {

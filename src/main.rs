@@ -171,8 +171,8 @@ fn convo() {
         &"t10k-labels.idx1-ubyte".into(),
     )
     .unwrap();
-    let xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
-    let ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
+    let _xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
+    let _ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
     let batch_size = 100;
 
     let inp = g.alloc_input(&[1, 28, 28]);
@@ -282,7 +282,7 @@ fn text_dataset<R: Rng>(
 
     let mut xs: Vec<u32> = Vec::new();
     let mut ys: Vec<u32> = Vec::new();
-    for i in 0..batch_size {
+    for _i in 0..batch_size {
         let start: usize = rng.gen_range(0..alpha.len());
         let all = alpha
             .iter()
@@ -323,7 +323,7 @@ fn gpt() {
 
     let mut g = Graph::new();
 
-    let batch_size = 10;
+    let _batch_size = 10;
     let num_tokens = 10;
     let vocab_size = 26;
     let embedding_degree = 50;
@@ -332,7 +332,7 @@ fn gpt() {
     let num_heads = 2;
     let head_size = 25;
 
-    let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
+    let _embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
 
     let inp = g.alloc_input(&[num_tokens, num_tokens]);
 
@@ -341,7 +341,7 @@ fn gpt() {
     let mut curr_inp = inp;
     for _ in 0..num_attentions {
         let mut heads = Vec::new();
-        for i in 0..num_heads {
+        for _i in 0..num_heads {
             let k_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
             let q_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
             let v_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);

@@ -15,7 +15,7 @@ impl Loss for CrossEntropy {
         expected_shape.push(self.classes as usize);
         assert_eq!(inp.shape(), expected_shape);
         let mut out = Tensor::<f32>::zeros(self.target.shape());
-        for ((mut r, o), t) in out
+        for ((r, o), t) in out
             .blob_mut()
             .iter_mut()
             .zip(inp.keep_right(1).inners().iter())
@@ -35,7 +35,7 @@ impl Loss for CrossEntropy {
             .zip(self.target.blob().iter())
         {
             let sum = o
-                .mapf(|f| f.exp())
+                .map_values(|f| f.exp())
                 .inners()
                 .iter()
                 .map(|t| t.scalar())

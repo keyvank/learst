@@ -11,12 +11,12 @@ impl Function for Softmax {
         assert_eq!(inps.len(), 1);
         inps[0].map(1, |l| {
             let sum = l
-                .mapf(|f| f.exp())
+                .map_values(|f| f.exp())
                 .inners()
                 .iter()
                 .map(|t| t.scalar())
                 .sum::<f32>();
-            l.mapf(|f| f.exp() / sum)
+            l.map_values(|f| f.exp() / sum)
         })
     }
     fn grad(

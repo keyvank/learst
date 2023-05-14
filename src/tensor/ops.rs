@@ -211,7 +211,7 @@ impl<V: TensorElement + std::ops::Neg<Output = V>> Neg for &Tensor<V> {
 impl<'a, V: TensorElement + std::ops::Neg<Output = V>> Neg for &TensorView<'a, V> {
     type Output = Tensor<V>;
     fn neg(self) -> Self::Output {
-        self.mapf(|f| -f)
+        self.map_values(|f| -f)
     }
 }
 
