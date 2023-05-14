@@ -174,6 +174,29 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
             shape: final_shape.to_vec(),
         }
     }
+    fn keep_right_mut(&mut self, dims: usize) -> TensorMutView<V> {
+        let mut new_shape = self.shape().to_vec();
+        if self.dim() == dims {
+            new_shape.insert(0, 1);
+        }
+        for i in 0..new_shape.len() - dims - 1 {
+            let rem = new_shape.remove(0);
+            new_shape[0] *= rem;
+        }
+        self.reshape_mut(&new_shape)
+    }
+
+    fn keep_left_mut(&mut self, dims: usize) -> TensorMutView<V> {
+        let mut new_shape = self.shape().to_vec();
+        if self.dim() == dims {
+            new_shape.push(1);
+        }
+        for i in 0..new_shape.len() - dims - 1 {
+            let rem = new_shape.pop().unwrap();
+            *new_shape.last_mut().unwrap() *= rem;
+        }
+        self.reshape_mut(&new_shape)
+    }
     fn get_mut(&mut self, ind: usize) -> TensorMutView<V> {
         let mut v = self.view_mut();
         v.zoom(ind);
@@ -228,6 +251,30 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
     fn tensor(&self) -> &Tensor<V>;
     fn offset(&self) -> usize;
 
+    fn keep_right(&self, dims: usize) -> TensorView<V> {
+        let mut new_shape = self.shape().to_vec();
+        if self.dim() == dims {
+            new_shape.insert(0, 1);
+        }
+        for i in 0..new_shape.len() - dims - 1 {
+            let rem = new_shape.remove(0);
+            new_shape[0] *= rem;
+        }
+        self.reshape(&new_shape)
+    }
+
+    fn keep_left(&self, dims: usize) -> TensorView<V> {
+        let mut new_shape = self.shape().to_vec();
+        if self.dim() == dims {
+            new_shape.push(1);
+        }
+        for i in 0..new_shape.len() - dims - 1 {
+            let rem = new_shape.pop().unwrap();
+            *new_shape.last_mut().unwrap() *= rem;
+        }
+        self.reshape(&new_shape)
+    }
+
     fn equals<T2: TensorOps<V>>(&self, other: &T2) -> Tensor<bool>
     where
         V: PartialEq,
@@ -271,11 +318,8 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         dim: usize,
         f: F,
     ) -> Tensor<W> {
-        let inp_shape = self.shape()[self.dim() - dim..].to_vec();
-        let mut reshape = vec![0];
-        reshape.extend(&inp_shape);
         let blob = self
-            .reshape(&reshape)
+            .keep_right(dim)
             .inners()
             .into_par_iter()
             .map(|v| f(v))
@@ -374,16 +418,12 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         shape[dim - 1] = temp;
         let mut t = Tensor::zeros(&shape);
         for (mut dst, src) in t
-            .reshape_mut(&[0, shape[dim - 2], shape[dim - 1]])
+            .keep_right_mut(2)
             .iter_mut()
-            .zip(
-                self.reshape(&[0, shape[dim - 1], shape[dim - 2]])
-                    .inners()
-                    .iter(),
-            )
+            .zip(self.keep_right(2).inners().iter())
         {
-            for i in 0..shape[dim - 2] {
-                for j in 0..shape[dim - 1] {
+            for i in 0..dst.shape()[0] {
+                for j in 0..dst.shape()[1] {
                     dst.get_mut(i).get_mut(j).set(src.get(j).get(i));
                 }
             }

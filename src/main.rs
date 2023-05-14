@@ -388,5 +388,5 @@ fn gpt() {
 }
 
 fn main() {
-    convo();
+    xor();
 }

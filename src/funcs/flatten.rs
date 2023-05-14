@@ -9,7 +9,7 @@ impl Flatten {
 
 impl Function for Flatten {
     fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
-        inps[0].reshape(&[inps[0].len(), 0]).into()
+        inps[0].keep_left(1).into()
     }
     fn grad(
         &self,

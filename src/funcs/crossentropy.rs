@@ -16,30 +16,23 @@ impl Loss for CrossEntropy {
         assert_eq!(inp.shape(), expected_shape);
         let mut out = Tensor::<f32>::zeros(self.target.shape());
         for ((mut r, o), t) in out
-            .reshape_mut(&[0])
+            .blob_mut()
             .iter_mut()
-            .zip(inp.reshape(&[0, self.classes as usize]).inners().iter())
-            .zip(self.target.reshape(&[0]).inners().iter())
+            .zip(inp.keep_right(1).inners().iter())
+            .zip(self.target.blob().iter())
         {
-            let sum = o
-                .mapf(|f| f.exp())
-                .inners()
-                .iter()
-                .map(|t| t.scalar())
-                .sum::<f32>();
-            r.set(Tensor::scalar(
-                sum.ln() - o.get(t.scalar() as usize).scalar(),
-            ));
+            let sum = o.blob().iter().map(|f| f.exp()).sum::<f32>();
+            *r = sum.ln() - o.get(*t as usize).scalar();
         }
         out
     }
     fn grad(&self, inp: &Tensor<f32>, _out: &Tensor<f32>) -> Tensor<f32> {
         let mut result = Tensor::<f32>::zeros(inp.shape());
         for ((mut r, o), t) in result
-            .reshape_mut(&[0, self.classes as usize])
+            .keep_right_mut(1)
             .iter_mut()
-            .zip(inp.reshape(&[0, self.classes as usize]).inners().iter())
-            .zip(self.target.reshape(&[0]).inners().iter())
+            .zip(inp.keep_right(1).inners().iter())
+            .zip(self.target.blob().iter())
         {
             let sum = o
                 .mapf(|f| f.exp())
@@ -50,12 +43,11 @@ impl Loss for CrossEntropy {
 
             for c in 0..self.classes as usize {
                 let val = o.get(c).scalar().exp();
-                r.get_mut(c)
-                    .set(Tensor::scalar(if t.scalar() as usize == c {
-                        val / sum - 1.0
-                    } else {
-                        val / sum
-                    }));
+                r.get_mut(c).set(Tensor::scalar(if *t as usize == c {
+                    val / sum - 1.0
+                } else {
+                    val / sum
+                }));
             }
         }
 
