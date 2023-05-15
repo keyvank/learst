@@ -637,9 +637,20 @@ fn combine_shapes(a: &[usize], b: &[usize]) -> Vec<usize> {
     shape
 }
 
-pub fn binary<F: FnMut(&[usize], &[usize], &[usize]) -> ()>(a: &[usize], b: &[usize], mut f: F) {
-    let shape = combine_shapes(a, b);
-    let mut curr = vec![0; shape.len()];
+pub fn combine_map<
+    'a,
+    V: TensorElement,
+    W: TensorElement,
+    X: TensorElement,
+    T1: TensorOps<V>,
+    T2: TensorOps<W>,
+    F: Fn(&TensorView<'_, V>, &TensorView<'_, W>) -> Tensor<X> + Sync + Send,
+>(
+    t1: &T1,
+    t2: &T2,
+    dims: usize,
+    f: F,
+) -> Tensor<X> {
     fn calc_shape(pos: &[usize], shape: &[usize]) -> Vec<usize> {
         pos[pos.len() - shape.len()..]
             .iter()
@@ -647,22 +658,35 @@ pub fn binary<F: FnMut(&[usize], &[usize], &[usize]) -> ()>(a: &[usize], b: &[us
             .map(|(p, s)| if *s == 1 { 0 } else { *p })
             .collect()
     }
-    loop {
-        let a_pos = calc_shape(&curr, a);
-        let b_pos = calc_shape(&curr, b);
-        f(&curr, &a_pos, &b_pos);
-        if curr.len() == 0 {
-            return;
-        }
-        curr[shape.len() - 1] += 1;
-        for i in (0..curr.len()).rev() {
-            if curr[i] == shape[i] {
-                if i == 0 {
-                    return;
-                }
-                curr[i] = 0;
-                curr[i - 1] += 1;
+    let mut shape = combine_shapes(
+        &t1.shape()[..t1.dim() - dims],
+        &t2.shape()[..t2.dim() - dims],
+    );
+    let works = shape.iter().fold(1, |a, b| a * b);
+    let tensors = (0..works)
+        .into_par_iter()
+        .map(|mut i| {
+            let mut result = vec![];
+            for s in shape.iter().rev() {
+                result.insert(0, i % s);
+                i = i / s;
             }
-        }
-    }
+            let t1_pos = calc_shape(&result, &t1.shape()[..t1.dim() - dims]);
+            let t2_pos = calc_shape(&result, &t2.shape()[..t2.dim() - dims]);
+            let mut t1_view = t1.view();
+            for i in t1_pos.iter() {
+                t1_view.zoom(*i);
+            }
+            let mut t2_view = t2.view();
+            for i in t2_pos.iter() {
+                t2_view.zoom(*i);
+            }
+            f(&t1_view, &t2_view)
+        })
+        .collect::<Vec<_>>();
+    let t_shape = tensors.first().unwrap().shape().to_vec();
+    assert!(tensors.iter().all(|t| t.shape() == t_shape));
+    let data = tensors.into_iter().map(|t| t.blob).flatten().collect();
+    shape.extend(t_shape);
+    Tensor::raw(&shape, data)
 }
