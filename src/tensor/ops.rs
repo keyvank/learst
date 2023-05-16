@@ -111,16 +111,19 @@ impl<'a, V: TensorElement + std::ops::Mul<Output = V> + std::ops::Add<Output = V
     type Output = Tensor<V>;
     fn bitxor(self, other: &TensorView<V>) -> Self::Output {
         combine_map(self, other, 2, |a, b| {
-            let mut data = Vec::new();
-            for i in 0..a.shape()[0] {
-                for j in 0..b.shape()[1] {
+            let works = a.shape()[0] * b.shape()[1];
+            let data = (0..works)
+                .into_par_iter()
+                .map(|work| {
+                    let j = work % b.shape()[1];
+                    let i = work / b.shape()[1];
                     let mut sum = <<V as std::ops::Mul>::Output as std::ops::Add>::Output::zero();
                     for k in 0..a.shape()[1] {
                         sum = sum + a.get(i).get(k).scalar() * b.get(k).get(j).scalar();
                     }
-                    data.push(sum);
-                }
-            }
+                    sum
+                })
+                .collect();
             Tensor::raw(&[a.shape()[0], b.shape()[1]], data)
         })
     }

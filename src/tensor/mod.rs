@@ -628,7 +628,6 @@ fn combine_shapes(a: &[usize], b: &[usize]) -> Vec<usize> {
                 } else if b == 1 {
                     a
                 } else {
-                    println!("{:?} {:?}", a, b);
                     panic!("Cannot be combined!")
                 }
             },

@@ -69,28 +69,31 @@ pub fn conv<T1: TensorOps<f32>, T2: TensorOps<f32>>(
             let iw = work_id % result_width;
             let start_h = (ih * stride) as isize - padding as isize;
             let start_w = (iw * stride) as isize - padding as isize;
-            let mut sum = 0.;
-            for (fh, oh) in (start_h..start_h + dilated_kernel_size as isize)
+
+            (start_h..start_h + dilated_kernel_size as isize)
+                .into_par_iter()
                 .step_by(dilation + 1)
                 .enumerate()
-            {
-                for (fw, ow) in (start_w..start_w + dilated_kernel_size as isize)
-                    .step_by(dilation + 1)
-                    .enumerate()
-                {
-                    let value = if oh < 0
-                        || oh >= input_height as isize
-                        || ow < 0
-                        || ow >= input_width as isize
+                .map(|(fh, oh)| {
+                    let mut sum = 0.;
+                    for (fw, ow) in (start_w..start_w + dilated_kernel_size as isize)
+                        .step_by(dilation + 1)
+                        .enumerate()
                     {
-                        0.
-                    } else {
-                        image.get(oh as usize).get(ow as usize).scalar()
-                    };
-                    sum += value * kernel.get(fh).get(fw).scalar();
-                }
-            }
-            sum
+                        let value = if oh < 0
+                            || oh >= input_height as isize
+                            || ow < 0
+                            || ow >= input_width as isize
+                        {
+                            0.
+                        } else {
+                            image.get(oh as usize).get(ow as usize).scalar()
+                        };
+                        sum += value * kernel.get(fh).get(fw).scalar();
+                    }
+                    sum
+                })
+                .sum::<f32>()
         })
         .collect::<Vec<f32>>();
     Tensor::raw(&[result_height, result_width], data)
