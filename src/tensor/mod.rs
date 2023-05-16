@@ -689,3 +689,42 @@ pub fn combine_map<
     shape.extend(t_shape);
     Tensor::raw(&shape, data)
 }
+
+pub fn shuffle_batch<
+    R: Rng,
+    V: TensorElement,
+    W: TensorElement,
+    T1: TensorOps<V>,
+    T2: TensorOps<W>,
+>(
+    rng: &mut R,
+    t1: &T1,
+    t2: &T2,
+) -> (Tensor<V>, Tensor<W>) {
+    let mut batch = t1
+        .inners()
+        .into_iter()
+        .zip(t2.inners().into_iter())
+        .collect::<Vec<_>>();
+    batch.shuffle(rng);
+    let (t1_dat, t2_dat): (Vec<TensorView<'_, V>>, Vec<TensorView<'_, W>>) =
+        batch.into_iter().unzip();
+    (
+        Tensor::raw(
+            t1.shape(),
+            t1_dat
+                .into_iter()
+                .map(|t| t.blob().to_vec())
+                .flatten()
+                .collect(),
+        ),
+        Tensor::raw(
+            t2.shape(),
+            t2_dat
+                .into_iter()
+                .map(|t| t.blob().to_vec())
+                .flatten()
+                .collect(),
+        ),
+    )
+}

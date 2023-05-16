@@ -1,7 +1,7 @@
 use learst::funcs::*;
 use learst::graph::{Graph, TensorId};
 use learst::optimizer::NaiveOptimizer;
-use learst::tensor::{Tensor, TensorElement, TensorMutOps, TensorOps};
+use learst::tensor::{combine_map, shuffle_batch, Tensor, TensorElement, TensorMutOps, TensorOps};
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
@@ -161,7 +161,7 @@ fn convo() {
     let mut rng = rand::thread_rng();
     let mut g = Graph::new();
 
-    let (xs, ys) = mnist_images(
+    let (mut xs, mut ys) = mnist_images(
         &"train-images.idx3-ubyte".into(),
         &"train-labels.idx1-ubyte".into(),
     )
@@ -171,15 +171,17 @@ fn convo() {
         &"t10k-labels.idx1-ubyte".into(),
     )
     .unwrap();
-    let _xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
-    let _ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
-    let batch_size = 100;
+    let xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
+    let ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
+    let batch_size = 1000;
 
     let inp = g.alloc_input(&[1, 28, 28]);
     let conv1 = g.alloc_param(&mut rng, &[5, 1, 3, 3]);
     let conv2 = g.alloc_param(&mut rng, &[10, 5, 3, 3]);
-    let lin = g.alloc_param(&mut rng, &[490, 10]);
-    let lin_bias = g.alloc_param(&mut rng, &[10]);
+    let lin = g.alloc_param(&mut rng, &[490, 200]);
+    let lin_bias = g.alloc_param(&mut rng, &[200]);
+    let lin2 = g.alloc_param(&mut rng, &[200, 10]);
+    let lin2_bias = g.alloc_param(&mut rng, &[10]);
     let out1 = g.call(Convolution::new(3, 1, 1, 5), &[inp, conv1]);
     let sigm1 = g.call(Relu::new(), &[out1]);
     let max1 = g.call(MaxPool::new(2), &[sigm1]);
@@ -191,7 +193,11 @@ fn convo() {
     let flat = g.call(Flatten::new(), &[norm2]);
     let out = g.call(MatMul::new(), &[flat, lin]);
     let out_bias = g.call(Add::new(), &[out, lin_bias]);
-    let params = vec![conv1, conv2, lin, lin_bias];
+    let out_bias_relu = g.call(Relu::new(), &[out_bias]);
+    let out_bias_relu_norm = g.call(LayerNorm::new(2), &[out_bias_relu]);
+    let out2 = g.call(MatMul::new(), &[out_bias_relu_norm, lin2]);
+    let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
+    let params = vec![conv1, conv2, lin, lin_bias, lin2, lin2_bias];
     for p in params.iter() {
         let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
         let mut bytes = Vec::new();
@@ -199,12 +205,14 @@ fn convo() {
         let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
         g.load(*p, &t);
     }
-    let mut opt = NaiveOptimizer::new(0.001);
+    let mut opt = NaiveOptimizer::new(0.000002);
+    println!("=============");
     loop {
-        for epoch in 0..600 {
-            /*g.load(inp, &xs_test);
+        (xs, ys) = shuffle_batch(&mut rng, &xs, &ys);
+        for epoch in 0..60 {
+            g.load(inp, &xs_test);
             g.forward();
-            let predictions = g.get(out_bias).argmax();
+            let predictions = g.get(out2_bias).argmax();
             println!(
                 "Accuracy: {}",
                 predictions
@@ -214,7 +222,7 @@ fn convo() {
                     .map(|v| v.as_f32())
                     .sum::<f32>()
                     / predictions.size() as f32
-            );*/
+            );
 
             let xs: Tensor<f32> = xs
                 .get_slice(epoch * batch_size, batch_size)
@@ -228,7 +236,7 @@ fn convo() {
             g.load(inp, &xs);
             g.forward();
             g.zero_grad();
-            let err = g.backward_all(out_bias, CrossEntropy::new(10, ys.clone()));
+            let err = g.backward_all(out2_bias, CrossEntropy::new(10, ys.clone()));
             println!("Loss: {}", err.mean());
             for p in params.iter() {
                 let data = bincode::serialize(g.get(*p)).unwrap();
@@ -307,11 +315,7 @@ fn embed(s: &Tensor<u32>, embedding: &Tensor<f32>) -> Tensor<f32> {
 
 fn unembed(s: &Tensor<u32>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>) -> Tensor<f32> {
     let degree = s_result.shape()[s_result.dim() - 1];
-    for (ch, embed) in s
-        .blob()
-        .iter()
-        .zip(s_result.reshape(&[0, degree]).inners().iter())
-    {
+    for (ch, embed) in s.blob().iter().zip(s_result.keep_right(1).inners().iter()) {
         let mut t = embedding.get_mut(*ch as usize);
         t.set(embed.clone());
     }
@@ -388,5 +392,5 @@ fn gpt() {
 }
 
 fn main() {
-    xor();
+    convo();
 }
