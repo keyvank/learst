@@ -10,7 +10,7 @@ impl CrossEntropy {
     }
 }
 impl Loss for CrossEntropy {
-    fn run(&self, inp: &Tensor<f32>) -> Tensor<f32> {
+    fn run(&mut self, inp: &Tensor<f32>) -> Tensor<f32> {
         let mut expected_shape = self.target.shape().to_vec();
         expected_shape.push(self.classes as usize);
         assert_eq!(inp.shape(), expected_shape);

@@ -10,7 +10,7 @@ impl Dropout {
 }
 
 impl Function for Dropout {
-    fn run(&self, _inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, _inps: &[&Tensor<f32>]) -> Tensor<f32> {
         todo!()
     }
     fn grad(

@@ -7,7 +7,7 @@ impl Sigmoid {
     }
 }
 impl Function for Sigmoid {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map_values(|f| 1. / (1. + (-f).exp()))
     }

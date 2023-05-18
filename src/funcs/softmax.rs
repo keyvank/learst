@@ -7,7 +7,7 @@ impl Softmax {
     }
 }
 impl Function for Softmax {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map(1, |l| {
             let sum = l

@@ -10,7 +10,7 @@ impl MaxPool {
 }
 
 impl Function for MaxPool {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         inps[0].map(2, |img| {
             let final_height = img.shape()[0] / self.kernel_size;
             let final_width = img.shape()[1] / self.kernel_size;

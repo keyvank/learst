@@ -154,7 +154,7 @@ impl Graph {
             }
         }
     }
-    pub fn backward_all(&mut self, id: TensorId, loss_fn: Box<dyn Loss>) -> Tensor<f32> {
+    pub fn backward_all(&mut self, id: TensorId, mut loss_fn: Box<dyn Loss>) -> Tensor<f32> {
         let output = self.get(id);
         let loss = loss_fn.run(&output);
 
@@ -168,7 +168,7 @@ impl Graph {
         loss
     }
     pub fn forward(&mut self) {
-        for c in self.computations.iter() {
+        for c in self.computations.iter_mut() {
             let tensors = c
                 .inps
                 .iter()
@@ -178,7 +178,7 @@ impl Graph {
             self.tensors.insert(c.out, result);
         }
     }
-    pub fn call(&mut self, f: Box<dyn Function>, tensor_ids: &[TensorId]) -> TensorId {
+    pub fn call(&mut self, mut f: Box<dyn Function>, tensor_ids: &[TensorId]) -> TensorId {
         let tensors = tensor_ids
             .iter()
             .map(|id| self.tensors.get(id).expect("Tensor not found!"))

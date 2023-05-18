@@ -8,7 +8,7 @@ impl Transpose {
 }
 
 impl Function for Transpose {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         inps[0].transpose()
     }
     fn grad(

@@ -8,7 +8,7 @@ impl Cat {
 }
 
 impl Function for Cat {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         Tensor::cat(inps)
     }
     fn grad(

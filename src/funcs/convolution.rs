@@ -100,7 +100,7 @@ pub fn conv<T1: TensorOps<f32>, T2: TensorOps<f32>>(
 }
 
 impl Function for Convolution {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         inps[0].map(3, |t| {
             inps[1].map(3, |f| apply_filter(&t, &f, self.padding, 1, 0))
         })

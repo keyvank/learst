@@ -14,7 +14,7 @@ impl Mask {
 }
 
 impl Function for Mask {
-    fn run(&self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
+    fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         let mut reshaped = self.mask.shape().to_vec();
         reshaped.insert(0, 0);
         let mut result = inps[0].clone();
