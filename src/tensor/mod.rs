@@ -1,52 +1,14 @@
-use rand::prelude::*;
-use std::ops::*;
+mod elements;
 mod ops;
+mod utils;
+pub use elements::*;
 pub use ops::*;
+pub use utils::*;
+
+use rand::prelude::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-
-pub trait TensorElement: Clone + Copy + Sized + Send + Sync {
-    fn zero() -> Self;
-    fn one() -> Self;
-    fn as_f32(self) -> f32;
-}
-impl TensorElement for f32 {
-    fn zero() -> Self {
-        0.
-    }
-    fn one() -> Self {
-        1.
-    }
-    fn as_f32(self) -> f32 {
-        self
-    }
-}
-impl TensorElement for u32 {
-    fn zero() -> Self {
-        0
-    }
-    fn one() -> Self {
-        1
-    }
-    fn as_f32(self) -> f32 {
-        self as f32
-    }
-}
-impl TensorElement for bool {
-    fn zero() -> Self {
-        false
-    }
-    fn one() -> Self {
-        true
-    }
-    fn as_f32(self) -> f32 {
-        if self {
-            1.0
-        } else {
-            0.0
-        }
-    }
-}
+use std::ops::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tensor<V: TensorElement> {
@@ -156,9 +118,6 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
     fn fill(&mut self, v: V) {
         self.blob_mut().fill(v);
     }
-    fn shuffle<R: Rng>(&mut self, _rng: R) {
-        unimplemented!();
-    }
     fn set<T: TensorOps<V>>(&mut self, t: T) {
         assert_eq!(self.shape(), t.shape());
         self.blob_mut().clone_from_slice(t.blob());
@@ -203,20 +162,6 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
             _value_type: std::marker::PhantomData::<V>,
         }
     }
-}
-
-pub fn reshape(size: usize, shape: &[usize]) -> Vec<usize> {
-    let mut final_shape = shape.to_vec();
-    if shape[0] == 0 && shape[1..].iter().all(|s| *s != 0) {
-        let mul = shape[1..].iter().fold(1, |c, s| c * s);
-        final_shape[0] = size / mul;
-    } else if shape[shape.len() - 1] == 0 && shape[0..shape.len() - 1].iter().all(|s| *s != 0) {
-        let mul = shape[..shape.len() - 1].iter().fold(1, |c, s| c * s);
-        final_shape[shape.len() - 1] = size / mul;
-    } else {
-        assert!(shape.iter().all(|s| *s != 0));
-    };
-    final_shape
 }
 
 impl<V: TensorElement> From<TensorView<'_, V>> for Tensor<V> {
@@ -484,32 +429,6 @@ impl<V: TensorElement> Tensor<V> {
             shape: shape.to_vec(),
         }
     }
-    pub fn fill_by<F: Fn(&[usize]) -> V>(shape: &[usize], f: F) -> Self {
-        let mut curr = vec![0; shape.len()];
-        let mut blob = Vec::new();
-        let mut finished = false;
-        while !finished {
-            blob.push(f(&curr));
-            if curr.len() == 0 {
-                break;
-            }
-            curr[shape.len() - 1] += 1;
-            for i in (0..curr.len()).rev() {
-                if curr[i] == shape[i] {
-                    if i == 0 {
-                        finished = true;
-                        break;
-                    }
-                    curr[i] = 0;
-                    curr[i - 1] += 1;
-                }
-            }
-        }
-        Tensor {
-            blob,
-            shape: shape.to_vec(),
-        }
-    }
     pub fn tril(n: usize) -> Self {
         Tensor {
             blob: (0..n * n)
@@ -584,124 +503,4 @@ impl<V: TensorElement> Tensor<V> {
             .map(|d| Tensor::raw(&target_shape, d))
             .collect()
     }
-}
-
-fn combine_shapes(a: &[usize], b: &[usize]) -> Vec<usize> {
-    let shape_len = std::cmp::max(a.len(), b.len());
-    let mut shape = Vec::new();
-    for i in 0..shape_len {
-        shape.insert(
-            0,
-            if i >= a.len() {
-                b[b.len() - 1 - i]
-            } else if i >= b.len() {
-                a[a.len() - 1 - i]
-            } else {
-                let (a, b) = (a[a.len() - 1 - i], b[b.len() - 1 - i]);
-                if a == b {
-                    a
-                } else if a == 1 {
-                    b
-                } else if b == 1 {
-                    a
-                } else {
-                    panic!("Cannot be combined!")
-                }
-            },
-        );
-    }
-    shape
-}
-
-pub fn combine_map<
-    'a,
-    V: TensorElement,
-    W: TensorElement,
-    X: TensorElement,
-    T1: TensorOps<V>,
-    T2: TensorOps<W>,
-    F: Fn(&TensorView<'_, V>, &TensorView<'_, W>) -> Tensor<X> + Sync + Send,
->(
-    t1: &T1,
-    t2: &T2,
-    dims: usize,
-    f: F,
-) -> Tensor<X> {
-    fn calc_shape(pos: &[usize], shape: &[usize]) -> Vec<usize> {
-        pos[pos.len() - shape.len()..]
-            .iter()
-            .zip(shape.iter())
-            .map(|(p, s)| if *s == 1 { 0 } else { *p })
-            .collect()
-    }
-    let mut shape = combine_shapes(
-        &t1.shape()[..t1.dim() - dims],
-        &t2.shape()[..t2.dim() - dims],
-    );
-    let works = shape.iter().fold(1, |a, b| a * b);
-    let tensors = (0..works)
-        .into_par_iter()
-        .map(|mut i| {
-            let mut result = vec![];
-            for s in shape.iter().rev() {
-                result.insert(0, i % s);
-                i = i / s;
-            }
-            let t1_pos = calc_shape(&result, &t1.shape()[..t1.dim() - dims]);
-            let t2_pos = calc_shape(&result, &t2.shape()[..t2.dim() - dims]);
-            let mut t1_view = t1.view();
-            for i in t1_pos.iter() {
-                t1_view.zoom(*i);
-            }
-            let mut t2_view = t2.view();
-            for i in t2_pos.iter() {
-                t2_view.zoom(*i);
-            }
-            f(&t1_view, &t2_view)
-        })
-        .collect::<Vec<_>>();
-    let t_shape = tensors.first().unwrap().shape().to_vec();
-    assert!(tensors.iter().all(|t| t.shape() == t_shape));
-    let data = tensors.into_iter().map(|t| t.blob).flatten().collect();
-    shape.extend(t_shape);
-    Tensor::raw(&shape, data)
-}
-
-pub fn shuffle_batch<
-    R: Rng,
-    V: TensorElement,
-    W: TensorElement,
-    T1: TensorOps<V>,
-    T2: TensorOps<W>,
->(
-    rng: &mut R,
-    t1: &T1,
-    t2: &T2,
-) -> (Tensor<V>, Tensor<W>) {
-    let mut batch = t1
-        .inners()
-        .into_iter()
-        .zip(t2.inners().into_iter())
-        .collect::<Vec<_>>();
-    batch.shuffle(rng);
-    let (t1_dat, t2_dat): (Vec<TensorView<'_, V>>, Vec<TensorView<'_, W>>) =
-        batch.into_iter().unzip();
-    (
-        Tensor::raw(
-            t1.shape(),
-            t1_dat
-                .into_iter()
-                .map(|t| t.blob().to_vec())
-                .flatten()
-                .collect(),
-        ),
-        Tensor::raw(
-            t2.shape(),
-            t2_dat
-                .into_iter()
-                .map(|t| t.blob().to_vec())
-                .flatten()
-                .collect(),
-        ),
-    )
 }

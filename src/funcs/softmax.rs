@@ -1,4 +1,5 @@
 use super::{Function, Tensor, TensorMutOps, TensorOps};
+use rayon::prelude::*;
 
 pub struct Softmax;
 impl Softmax {
@@ -31,23 +32,24 @@ impl Function for Softmax {
     ) -> Vec<Tensor<f32>> {
         let jacobian = out.map(1, |l| {
             let n = l.shape()[0];
-            let mut jacobian = Tensor::<f32>::zeros(&[n, n]);
-            for i in 0..n {
-                for j in 0..n {
-                    jacobian
-                        .get_mut(i)
-                        .get_mut(j)
-                        .set(Tensor::scalar(if i == j {
+            Tensor::raw(
+                &[n, n],
+                (0..n * n)
+                    .into_par_iter()
+                    .map(|work| {
+                        let i = work / n;
+                        let j = work % n;
+                        if i == j {
                             let sij = l.get(i).scalar();
                             sij * (1. - sij)
                         } else {
                             let si = l.get(i).scalar();
                             let sj = l.get(j).scalar();
                             -si * sj
-                        }));
-                }
-            }
-            jacobian
+                        }
+                    })
+                    .collect(),
+            )
         });
         let out = &out_grad.unsqueeze(-2) ^ &jacobian;
         vec![out.squeeze(-2).into()]
