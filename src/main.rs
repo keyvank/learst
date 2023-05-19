@@ -328,7 +328,7 @@ fn gpt() {
     let mut g = Graph::new();
 
     let _batch_size = 10;
-    let num_tokens = 10;
+    let num_tokens = 256;
     let vocab_size = 26;
     let embedding_degree = 384;
 
@@ -344,7 +344,7 @@ fn gpt() {
     let mut params: Vec<TensorId> = Vec::new();
 
     let mut curr_inp = inp;
-    for _ in 0..num_heads {
+    for _ in 0..num_attentions {
         let norm_inp = g.call(LayerNorm::new(1), &[curr_inp]);
         let mut heads = Vec::new();
         for _i in 0..num_heads {

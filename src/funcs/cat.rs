@@ -1,4 +1,4 @@
-use super::{Function, Tensor, TensorOps};
+use super::{Function, Tensor};
 
 pub struct Cat {}
 impl Cat {

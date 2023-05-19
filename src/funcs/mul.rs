@@ -18,6 +18,6 @@ impl Function for Mul {
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         assert_eq!(inps.len(), 2);
-        vec![inps[1].clone(), inps[0].clone()]
+        vec![inps[1] * out_grad, inps[0] * out_grad]
     }
 }
