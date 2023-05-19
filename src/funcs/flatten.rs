@@ -1,15 +1,17 @@
 use super::{Function, Tensor, TensorOps};
 
-pub struct Flatten {}
+pub struct Flatten {
+    dims: usize,
+}
 impl Flatten {
-    pub fn new() -> Box<dyn Function> {
-        Box::new(Self {})
+    pub fn new(dims: usize) -> Box<dyn Function> {
+        Box::new(Self { dims })
     }
 }
 
 impl Function for Flatten {
     fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
-        inps[0].keep_left(1).into()
+        inps[0].map(self.dims, |t| t.reshape(&[0]).into())
     }
     fn grad(
         &self,

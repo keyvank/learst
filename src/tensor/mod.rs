@@ -186,17 +186,6 @@ pub trait TensorMutOps<V: TensorElement>: TensorOps<V> {
         self.reshape_mut(&new_shape)
     }
 
-    fn keep_left_mut(&mut self, dims: usize) -> TensorMutView<V> {
-        let mut new_shape = self.shape().to_vec();
-        if self.dim() == dims {
-            new_shape.push(1);
-        }
-        for _i in 0..new_shape.len() - dims - 1 {
-            let rem = new_shape.pop().unwrap();
-            *new_shape.last_mut().unwrap() *= rem;
-        }
-        self.reshape_mut(&new_shape)
-    }
     fn get_mut(&mut self, ind: usize) -> TensorMutView<V> {
         let mut v = self.view_mut();
         v.zoom(ind);
@@ -259,18 +248,6 @@ pub trait TensorOps<V: TensorElement>: Sized + Into<Tensor<V>> + Send + Sync {
         for _i in 0..new_shape.len() - dims - 1 {
             let rem = new_shape.remove(0);
             new_shape[0] *= rem;
-        }
-        self.reshape(&new_shape)
-    }
-
-    fn keep_left(&self, dims: usize) -> TensorView<V> {
-        let mut new_shape = self.shape().to_vec();
-        if self.dim() == dims {
-            new_shape.push(1);
-        }
-        for _i in 0..new_shape.len() - dims - 1 {
-            let rem = new_shape.pop().unwrap();
-            *new_shape.last_mut().unwrap() *= rem;
         }
         self.reshape(&new_shape)
     }

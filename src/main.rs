@@ -190,7 +190,7 @@ fn convo() {
     let sigm2 = g.call(Relu::new(), &[out2]);
     let max2 = g.call(MaxPool::new(2), &[sigm2]);
     let norm2 = g.call(LayerNorm::new(2), &[max2]);
-    let flat = g.call(Flatten::new(), &[norm2]);
+    let flat = g.call(Flatten::new(2), &[norm2]);
     let out = g.call(MatMul::new(), &[flat, lin]);
     let out_bias = g.call(Add::new(), &[out, lin_bias]);
     let out_bias_relu = g.call(Relu::new(), &[out_bias]);
@@ -405,7 +405,7 @@ fn gpt() {
     let lin1_bias = g.alloc_param(&mut rng, &[20]);
     let lin2 = g.alloc_param(&mut rng, &[20, vocab_size]);
     let lin2_bias = g.alloc_param(&mut rng, &[vocab_size]);
-    let flat = g.call(Flatten::new(), &[inp]);
+    let flat = g.call(Flatten::new(2), &[inp]);
     let out1 = g.call(MatMul::new(), &[inp, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
     let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
