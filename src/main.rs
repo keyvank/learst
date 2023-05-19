@@ -330,43 +330,77 @@ fn gpt() {
     let _batch_size = 10;
     let num_tokens = 10;
     let vocab_size = 26;
-    let embedding_degree = 50;
+    let embedding_degree = 384;
 
-    let num_attentions = 3;
-    let num_heads = 2;
-    let head_size = 25;
+    let num_attentions = 6;
+    let num_heads = 6;
+    let head_size = 64;
+    let head_size_sqrt_inv = 0.125;
 
     let _embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
 
-    let inp = g.alloc_input(&[num_tokens, num_tokens]);
+    let inp = g.alloc_param(&mut rng, &[1, num_tokens, embedding_degree]);
 
     let mut params: Vec<TensorId> = Vec::new();
 
     let mut curr_inp = inp;
-    for _ in 0..num_attentions {
+    for _ in 0..num_heads {
+        let norm_inp = g.call(LayerNorm::new(1), &[curr_inp]);
         let mut heads = Vec::new();
         for _i in 0..num_heads {
             let k_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
             let q_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
             let v_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
             params.extend(&[k_params, q_params, v_params]);
-            let k = g.call(MatMul::new(), &[inp, k_params]);
-            let q = g.call(MatMul::new(), &[inp, q_params]);
-            let v = g.call(MatMul::new(), &[inp, v_params]);
-            let q_T = g.call(Transpose::new(), &[q]);
-            let kq = g.call(MatMul::new(), &[k, q_T]);
+            let k = g.call(MatMul::new(), &[norm_inp, k_params]);
+            let q = g.call(MatMul::new(), &[norm_inp, q_params]);
+            let v = g.call(MatMul::new(), &[norm_inp, v_params]);
+            let q_t = g.call(Transpose::new(), &[q]);
+            let kq = g.call(MatMul::new(), &[k, q_t]);
+            let kq_coeff = g.call(Coeff::new(head_size_sqrt_inv), &[kq]);
             let masked_kq = g.call(
                 Mask::new(!&Tensor::<bool>::tril(num_tokens), f32::NEG_INFINITY),
-                &[kq],
+                &[kq_coeff],
             );
             let soft_masked_kq = g.call(Softmax::new(), &[masked_kq]);
-            let atten = g.call(MatMul::new(), &[soft_masked_kq, v]);
+            let dropped_soft_masked_kq = g.call(Dropout::new(0.2), &[soft_masked_kq]);
+            let atten = g.call(MatMul::new(), &[dropped_soft_masked_kq, v]);
             heads.push(atten);
         }
         let cat = g.call(Cat::new(), &heads);
-        curr_inp = cat;
+
+        let proj_params = g.alloc_param(&mut rng, &[num_heads * head_size, embedding_degree]);
+        let proj_bias_params = g.alloc_param(&mut rng, &[embedding_degree]);
+        let proj_cat = g.call(MatMul::new(), &[cat, proj_params]);
+
+        let proj_cat_bias = g.call(Add::new(), &[proj_cat, proj_bias_params]);
+        let dropped_proj_cat_bias = g.call(Dropout::new(0.2), &[proj_cat_bias]);
+
+        let add_atten = g.call(Add::new(), &[norm_inp, dropped_proj_cat_bias]);
+        let add_atten_norm = g.call(LayerNorm::new(1), &[add_atten]);
+
+        let lin1_params = g.alloc_param(&mut rng, &[embedding_degree, 4 * embedding_degree]);
+        let bias1_params = g.alloc_param(&mut rng, &[4 * embedding_degree]);
+        let lin2_params = g.alloc_param(&mut rng, &[4 * embedding_degree, embedding_degree]);
+        let bias2_params = g.alloc_param(&mut rng, &[embedding_degree]);
+
+        let lin1_result = g.call(MatMul::new(), &[add_atten_norm, lin1_params]);
+        let lin1_bias_result = g.call(Add::new(), &[lin1_result, bias1_params]);
+        let lin1_act = g.call(Relu::new(), &[lin1_bias_result]);
+        let lin2_result = g.call(MatMul::new(), &[lin1_act, lin2_params]);
+        let lin2_bias_result = g.call(Add::new(), &[lin2_result, bias2_params]);
+
+        curr_inp = g.call(Add::new(), &[add_atten_norm, lin2_bias_result]);
     }
-    println!("{:?}", g.get(curr_inp).shape());
+
+    let norm_out = g.call(LayerNorm::new(1), &[curr_inp]);
+    let to_vocab = g.alloc_param(&mut rng, &[embedding_degree, vocab_size]);
+    let to_vocab_bias = g.alloc_param(&mut rng, &[vocab_size]);
+    let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab]);
+    let result = g.call(Add::new(), &[result_lin, to_vocab_bias]);
+    println!("FORWARDING");
+    g.forward();
+    println!("{:?}", g.get(result).argmax());
     /*let lin1 = g.alloc_param(&mut rng, &[embedding_degree, 20]);
     let lin1_bias = g.alloc_param(&mut rng, &[20]);
     let lin2 = g.alloc_param(&mut rng, &[20, vocab_size]);
@@ -392,5 +426,5 @@ fn gpt() {
 }
 
 fn main() {
-    convo();
+    gpt();
 }

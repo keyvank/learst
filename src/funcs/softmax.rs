@@ -10,13 +10,17 @@ impl Function for Softmax {
     fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
         inps[0].map(1, |l| {
+            let max = l
+                .blob()
+                .iter()
+                .fold(f32::NEG_INFINITY, |a, b| f32::max(a, *b));
             let sum = l
-                .map_values(|f| f.exp())
+                .map_values(|f| (f - max).exp())
                 .inners()
                 .iter()
                 .map(|t| t.scalar())
                 .sum::<f32>();
-            l.map_values(|f| f.exp() / sum)
+            l.map_values(|f| (f - max).exp() / sum)
         })
     }
     fn grad(
