@@ -6,16 +6,19 @@ use std::collections::{HashMap, HashSet};
 
 pub type TensorId = usize;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum TensorKind {
-    Input,
-    Param,
-    Output,
+struct Shape {
+    is_batched: bool,
+    shape: Vec<usize>,
 }
 
-struct TensorInfo {
-    kind: TensorKind,
-    shape: Vec<usize>,
+impl Shape {
+    fn matches(&self, t: &Tensor<f32>) -> bool {
+        if self.is_batched {
+            t.shape().len() == self.shape.len() + 1 && t.shape()[1..] == self.shape
+        } else {
+            t.shape() == self.shape
+        }
+    }
 }
 
 struct Computation {
@@ -25,44 +28,39 @@ struct Computation {
 }
 
 pub struct Graph {
+    tensors: HashMap<TensorId, Tensor<f32>>,
     grads: HashMap<TensorId, Tensor<f32>>,
     computations: Vec<Computation>,
-    info: HashMap<TensorId, TensorInfo>,
-    tensors: HashMap<TensorId, Tensor<f32>>,
-    parents: HashMap<TensorId, HashSet<TensorId>>,
-    next_tensor_id: TensorId,
+    shapes: HashMap<TensorId, Shape>,
 }
 
 impl Graph {
     pub fn new() -> Self {
         Self {
-            grads: Default::default(),
             tensors: Default::default(),
-            parents: Default::default(),
-            info: Default::default(),
+            grads: Default::default(),
             computations: Default::default(),
-            next_tensor_id: Default::default(),
+            shapes: Default::default(),
         }
     }
     pub fn alloc_param<R: Rng>(&mut self, rng: &mut R, shape: &[usize]) -> TensorId {
-        let id = self.next_tensor_id;
-        self.info.insert(
+        let id = self.tensors.len();
+        self.shapes.insert(
             id,
-            TensorInfo {
-                kind: TensorKind::Param,
+            Shape {
+                is_batched: false,
                 shape: shape.to_vec(),
             },
         );
         self.tensors.insert(id, Tensor::<f32>::rand(rng, shape));
-        self.next_tensor_id += 1;
         id
     }
     pub fn alloc_input(&mut self, shape: &[usize]) -> TensorId {
-        let id = self.next_tensor_id;
-        self.info.insert(
+        let id = self.tensors.len();
+        self.shapes.insert(
             id,
-            TensorInfo {
-                kind: TensorKind::Input,
+            Shape {
+                is_batched: true,
                 shape: shape.to_vec(),
             },
         );
@@ -72,28 +70,26 @@ impl Graph {
             id,
             Tensor::<f32>::rand(&mut rand::thread_rng(), &final_shape),
         );
-        self.next_tensor_id += 1;
         id
     }
     pub fn alloc_output(&mut self, shape: &[usize]) -> TensorId {
-        let id = self.next_tensor_id;
-        self.info.insert(
+        let id = self.tensors.len();
+        self.shapes.insert(
             id,
-            TensorInfo {
-                kind: TensorKind::Output,
+            Shape {
+                is_batched: true,
                 shape: shape.to_vec(),
             },
         );
         self.tensors.insert(id, Tensor::<f32>::zeros(&shape));
-        self.next_tensor_id += 1;
         id
     }
     pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
-        if let Some(inf) = self.info.get(&tensor_id) {
-            if inf.kind == TensorKind::Param {
-                assert_eq!(self.tensors[&tensor_id].shape(), tensor.shape());
-            }
-        }
+        assert!(self
+            .shapes
+            .get(&tensor_id)
+            .unwrap()
+            .matches(&self.tensors[&tensor_id]));
         self.tensors.insert(tensor_id, tensor.view().into());
     }
     pub fn zero_grad(&mut self) {
@@ -113,25 +109,6 @@ impl Graph {
     }
     pub fn get(&self, id: TensorId) -> &Tensor<f32> {
         self.tensors.get(&id).expect("Tensor not found!")
-    }
-    pub fn get_mut(&mut self, id: TensorId) -> &mut Tensor<f32> {
-        self.tensors.get_mut(&id).expect("Tensor not found!")
-    }
-    pub fn topology(&self, root: TensorId) -> Vec<TensorId> {
-        let mut visited = HashSet::<TensorId>::new();
-        let mut to_visit = vec![root];
-        let mut order = Vec::new();
-        while let Some(id) = to_visit.pop() {
-            if !visited.contains(&id) {
-                visited.insert(id);
-                for child in self.parents.get(&id).cloned().unwrap_or_default() {
-                    to_visit.insert(0, child);
-                }
-                order.push(id);
-            }
-        }
-
-        order
     }
     pub fn backward(&mut self, id: TensorId) {
         if let Some(comp) = self.computations.iter().find(|c| c.out == id) {
@@ -161,8 +138,14 @@ impl Graph {
         let grad = loss_fn.grad(output, &loss);
         self.add_grad(id, grad);
 
-        for t in self.topology(id) {
-            self.backward(t);
+        let backward_order = self
+            .computations
+            .iter()
+            .map(|c| c.out)
+            .rev()
+            .collect::<Vec<_>>();
+        for id in backward_order {
+            self.backward(id);
         }
 
         loss
@@ -190,9 +173,6 @@ impl Graph {
             out: child,
             inps: tensor_ids.to_vec(),
         });
-        for parent in tensor_ids {
-            self.parents.entry(child).or_default().insert(*parent);
-        }
         child
     }
     pub fn optimize(&mut self, opt: &mut Box<dyn Optimizer>, params: &HashSet<TensorId>) {

@@ -254,7 +254,7 @@ fn xor() {
 
     let (xs, ys) = xor_dataset();
 
-    let inp = g.alloc_input(&[3]);
+    let inp = g.alloc_input(&[4]);
     let lin1 = g.alloc_param(&mut rng, &[4, 1]);
     let lin1_bias = g.alloc_param(&mut rng, &[1]);
     let lin2 = g.alloc_param(&mut rng, &[1, 4]);
@@ -426,5 +426,5 @@ fn gpt() {
 }
 
 fn main() {
-    gpt();
+    xor();
 }
