@@ -9,12 +9,8 @@ impl MeanSquaredError {
     }
 }
 impl Loss for MeanSquaredError {
-    fn run(&mut self, inp: &Tensor<f32>) -> Tensor<f32> {
+    fn run(&self, inp: &Tensor<f32>) -> (Tensor<f32>, Tensor<f32>) {
         let diff = inp - &self.target;
-        &diff * &diff
-    }
-    fn grad(&self, inp: &Tensor<f32>, _out: &Tensor<f32>) -> Tensor<f32> {
-        let diff = inp - &self.target;
-        &diff * &Tensor::<f32>::scalar(2.)
+        (&diff * &diff, &diff * &Tensor::<f32>::scalar(2.))
     }
 }

@@ -133,9 +133,7 @@ impl Graph {
     }
     pub fn backward_all(&mut self, id: TensorId, mut loss_fn: Box<dyn Loss>) -> Tensor<f32> {
         let output = self.get(id);
-        let loss = loss_fn.run(&output);
-
-        let grad = loss_fn.grad(output, &loss);
+        let (loss, grad) = loss_fn.run(output);
         self.add_grad(id, grad);
 
         let backward_order = self

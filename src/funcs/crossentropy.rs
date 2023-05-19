@@ -10,27 +10,13 @@ impl CrossEntropy {
     }
 }
 impl Loss for CrossEntropy {
-    fn run(&mut self, inp: &Tensor<f32>) -> Tensor<f32> {
-        let mut expected_shape = self.target.shape().to_vec();
-        expected_shape.push(self.classes as usize);
-        assert_eq!(inp.shape(), expected_shape);
-        let mut out = Tensor::<f32>::zeros(self.target.shape());
-        for ((r, o), t) in out
-            .blob_mut()
-            .iter_mut()
-            .zip(inp.keep_right(1).inners().iter())
-            .zip(self.target.blob().iter())
-        {
-            let sum = o.blob().iter().map(|f| f.exp()).sum::<f32>();
-            *r = sum.ln() - o.get(*t as usize).scalar();
-        }
-        out
-    }
-    fn grad(&self, inp: &Tensor<f32>, _out: &Tensor<f32>) -> Tensor<f32> {
-        let mut result = Tensor::<f32>::zeros(inp.shape());
-        for ((mut r, o), t) in result
+    fn run(&self, inp: &Tensor<f32>) -> (Tensor<f32>, Tensor<f32>) {
+        let mut loss = Tensor::<f32>::zeros(self.target.shape());
+        let mut grad = Tensor::<f32>::zeros(inp.shape());
+        for (((mut r, l), o), t) in grad
             .keep_right_mut(1)
             .iter_mut()
+            .zip(loss.blob_mut().iter_mut())
             .zip(inp.keep_right(1).inners().iter())
             .zip(self.target.blob().iter())
         {
@@ -40,6 +26,7 @@ impl Loss for CrossEntropy {
                 .iter()
                 .map(|t| t.scalar())
                 .sum::<f32>();
+            *l = sum.ln() - o.get(*t as usize).scalar();
 
             for c in 0..self.classes as usize {
                 let val = o.get(c).scalar().exp();
@@ -51,6 +38,6 @@ impl Loss for CrossEntropy {
             }
         }
 
-        result
+        (loss, grad)
     }
 }
