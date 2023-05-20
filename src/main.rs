@@ -474,8 +474,8 @@ fn gpt() {
                     &embed(&Tensor::raw(&[1, num_tokens], context.clone()), &embedding),
                 );
                 g.forward();
-                let next_ch = g.get(result).argmax().blob()[cnt];
-                println!("{}", int_to_ch.get(&next_ch).unwrap());
+                let next_ch = g.get(result).argmax().blob()[cnt - 1];
+                println!("{:?}", context.iter().map(|i|int_to_ch.get(i).unwrap()).collect::<Vec<_>>());
                 context[cnt] = next_ch;
                 cnt += 1;
             }
