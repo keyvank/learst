@@ -327,21 +327,23 @@ fn gpt() {
 
     let mut g = Graph::new();
 
-    let _batch_size = 10;
-    let num_tokens = 256;
+    let batch_size = 3;
+    let num_tokens = 8;
     let vocab_size = 26;
-    let embedding_degree = 384;
+    let embedding_degree = 64;
 
-    let num_attentions = 6;
-    let num_heads = 6;
-    let head_size = 64;
-    let head_size_sqrt_inv = 0.125;
+    let num_attentions = 2;
+    let num_heads = 4;
+    let head_size = 16;
+    let head_size_sqrt_inv = 0.25;
 
-    let _embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
+    let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
 
-    let inp = g.alloc_param(&mut rng, &[1, num_tokens, embedding_degree]);
+    let inp = g.alloc_param(&mut rng, &[batch_size, num_tokens, embedding_degree]);
 
     let mut params: Vec<TensorId> = Vec::new();
+
+    params.extend(&[inp]);
 
     let mut curr_inp = inp;
     for _ in 0..num_attentions {
@@ -390,6 +392,15 @@ fn gpt() {
         let lin2_result = g.call(MatMul::new(), &[lin1_act, lin2_params]);
         let lin2_bias_result = g.call(Add::new(), &[lin2_result, bias2_params]);
 
+        params.extend(&[
+            proj_params,
+            proj_bias_params,
+            lin1_params,
+            bias1_params,
+            lin2_params,
+            bias2_params,
+        ]);
+
         curr_inp = g.call(Add::new(), &[add_atten_norm, lin2_bias_result]);
     }
 
@@ -398,33 +409,21 @@ fn gpt() {
     let to_vocab_bias = g.alloc_param(&mut rng, &[vocab_size]);
     let result_lin = g.call(MatMul::new(), &[norm_out, to_vocab]);
     let result = g.call(Add::new(), &[result_lin, to_vocab_bias]);
-    println!("FORWARDING");
-    g.forward();
-    println!("{:?}", g.get(result).argmax());
-    /*let lin1 = g.alloc_param(&mut rng, &[embedding_degree, 20]);
-    let lin1_bias = g.alloc_param(&mut rng, &[20]);
-    let lin2 = g.alloc_param(&mut rng, &[20, vocab_size]);
-    let lin2_bias = g.alloc_param(&mut rng, &[vocab_size]);
-    let flat = g.call(Flatten::new(2), &[inp]);
-    let out1 = g.call(MatMul::new(), &[inp, lin1]);
-    let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
-    let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
-    let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
-    let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
-    let params = vec![inp, lin1, lin1_bias, lin2, lin2_bias];
-    let mut opt = NaiveOptimizer::new(0.01);
+    params.extend(&[to_vocab, to_vocab_bias]);
+
+    let mut opt = NaiveOptimizer::new(0.000001);
     loop {
         let (xs, ys) = text_dataset(batch_size, num_tokens, &mut rng);
         g.load(inp, &embed(&xs, &embedding));
         g.forward();
         g.zero_grad();
-        let err = g.backward_all(out2_bias, CrossEntropy::new(vocab_size as u32, ys.clone()));
+        let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
         println!("Loss: {}", err.mean());
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(inp), &mut embedding);
-    }*/
+    }
 }
 
 fn main() {
-    xor();
+    gpt();
 }
