@@ -1,5 +1,6 @@
 use super::{Function, Tensor};
 
+#[derive(Debug)]
 pub struct Add;
 impl Add {
     pub fn new() -> Box<dyn Function> {

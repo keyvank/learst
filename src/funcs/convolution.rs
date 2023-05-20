@@ -1,6 +1,7 @@
 use super::{Function, Tensor, TensorOps};
 use rayon::prelude::*;
 
+#[derive(Debug)]
 pub struct Convolution {
     kernel_size: usize,
     padding: usize,

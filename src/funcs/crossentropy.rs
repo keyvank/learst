@@ -1,5 +1,6 @@
 use super::{Loss, Tensor, TensorMutOps, TensorOps};
 
+#[derive(Debug)]
 pub struct CrossEntropy {
     classes: u32,
     target: Tensor<u32>,

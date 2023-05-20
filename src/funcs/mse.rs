@@ -1,5 +1,6 @@
 use super::{Loss, Tensor};
 
+#[derive(Debug)]
 pub struct MeanSquaredError {
     target: Tensor<f32>,
 }

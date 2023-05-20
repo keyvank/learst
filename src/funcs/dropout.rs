@@ -1,5 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
+#[derive(Debug)]
 pub struct Dropout {
     mask: Tensor<f32>,
     rate: f32,

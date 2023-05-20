@@ -1,5 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
+#[derive(Debug)]
 pub struct MaxPool {
     kernel_size: usize,
 }

@@ -1,5 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
+#[derive(Debug)]
 pub struct Mean;
 impl Mean {
     pub fn new() -> Box<dyn Function> {

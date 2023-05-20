@@ -1,5 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
+#[derive(Debug)]
 pub struct MatMul;
 impl MatMul {
     pub fn new() -> Box<dyn Function> {

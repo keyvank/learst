@@ -1,5 +1,6 @@
 use super::{Function, Tensor, TensorMutOps, TensorOps};
 
+#[derive(Debug)]
 pub struct Mask {
     mask: Tensor<f32>,
     value: f32,

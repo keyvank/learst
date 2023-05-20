@@ -1,6 +1,7 @@
-use super::{Function, Tensor, TensorMutOps, TensorOps};
+use super::{Function, Tensor, TensorOps};
 use rayon::prelude::*;
 
+#[derive(Debug)]
 pub struct Softmax;
 impl Softmax {
     pub fn new() -> Box<dyn Function> {
@@ -10,7 +11,7 @@ impl Softmax {
 impl Function for Softmax {
     fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
         assert_eq!(inps.len(), 1);
-        inps[0].map(1, |l| {
+        let result = inps[0].map(1, |l| {
             let max = l
                 .blob()
                 .iter()
@@ -22,7 +23,8 @@ impl Function for Softmax {
                 .map(|t| t.scalar())
                 .sum::<f32>();
             l.map_values(|f| (f - max).exp() / sum)
-        })
+        });
+        result
     }
     fn grad(
         &self,
@@ -51,6 +53,7 @@ impl Function for Softmax {
                     .collect(),
             )
         });
+
         let out = &out_grad.unsqueeze(-2) ^ &jacobian;
         vec![out.squeeze(-2).into()]
     }

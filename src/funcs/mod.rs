@@ -42,7 +42,7 @@ pub use transpose::*;
 
 use super::tensor::*;
 
-pub trait Function {
+pub trait Function: std::fmt::Debug {
     fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32>;
     fn grad(
         &self,
@@ -52,6 +52,6 @@ pub trait Function {
     ) -> Vec<Tensor<f32>>;
 }
 
-pub trait Loss {
+pub trait Loss: std::fmt::Debug {
     fn run(&self, inp: &Tensor<f32>) -> (Tensor<f32>, Tensor<f32>);
 }

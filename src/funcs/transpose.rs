@@ -1,5 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
+#[derive(Debug)]
 pub struct Transpose {}
 impl Transpose {
     pub fn new() -> Box<dyn Function> {

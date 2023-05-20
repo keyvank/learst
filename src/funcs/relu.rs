@@ -1,5 +1,6 @@
 use super::{Function, Tensor, TensorOps};
 
+#[derive(Debug)]
 pub struct Relu;
 impl Relu {
     pub fn new() -> Box<dyn Function> {
