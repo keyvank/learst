@@ -458,7 +458,7 @@ impl<V: TensorElement> Tensor<V> {
     pub fn rand<R: Rng>(r: &mut R, shape: &[usize]) -> Tensor<f32> {
         Tensor::<f32> {
             blob: (0..shape.iter().fold(1, |curr, s| curr * s))
-                .map(|_| r.gen::<f32>() * 2. - 1.)
+                .map(|_| r.gen::<f32>() / 4. - 0.125)
                 .collect(),
             shape: shape.to_vec(),
         }

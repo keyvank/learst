@@ -360,6 +360,7 @@ fn gpt() {
             let q_t = g.call(Transpose::new(), &[q]);
             let kq = g.call(MatMul::new(), &[k, q_t]);
             let kq_coeff = g.call(Coeff::new(head_size_sqrt_inv), &[kq]);
+
             let masked_kq = g.call(
                 Mask::new(!&Tensor::<bool>::tril(num_tokens), f32::NEG_INFINITY),
                 &[kq_coeff],
@@ -411,12 +412,14 @@ fn gpt() {
     let result = g.call(Add::new(), &[result_lin, to_vocab_bias]);
     params.extend(&[to_vocab, to_vocab_bias]);
 
-    let mut opt = NaiveOptimizer::new(0.000001);
+    let mut opt = NaiveOptimizer::new(0.001);
     loop {
         let (xs, ys) = text_dataset(batch_size, num_tokens, &mut rng);
         g.load(inp, &embed(&xs, &embedding));
         g.forward();
         g.zero_grad();
+        println!("Inp: {:?}", xs);
+        println!("Pred: {:?}", g.get(result).argmax());
         let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
         println!("Loss: {}", err.mean());
         g.optimize(&mut opt, &params.iter().cloned().collect());
