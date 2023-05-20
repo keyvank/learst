@@ -44,7 +44,7 @@ impl Graph {
         }
     }
     pub fn alloc_param<R: Rng>(&mut self, rng: &mut R, shape: &[usize]) -> TensorId {
-        let id = self.tensors.len();
+        let id = self.alloc(Tensor::<f32>::rand(rng, shape));
         self.shapes.insert(
             id,
             Shape {
@@ -52,44 +52,30 @@ impl Graph {
                 shape: shape.to_vec(),
             },
         );
-        self.tensors.insert(id, Tensor::<f32>::rand(rng, shape));
         id
     }
     pub fn alloc_input(&mut self, shape: &[usize]) -> TensorId {
-        let id = self.tensors.len();
+        let mut final_shape = shape.to_vec();
+        final_shape.insert(0, 1);
+        let id = self.alloc(Tensor::<f32>::rand(&mut rand::thread_rng(), &final_shape));
         self.shapes.insert(
             id,
             Shape {
                 is_batched: true,
                 shape: shape.to_vec(),
             },
-        );
-        let mut final_shape = shape.to_vec();
-        final_shape.insert(0, 1);
-        self.tensors.insert(
-            id,
-            Tensor::<f32>::rand(&mut rand::thread_rng(), &final_shape),
         );
         id
     }
-    pub fn alloc_output(&mut self, shape: &[usize]) -> TensorId {
+    fn alloc(&mut self, t: Tensor<f32>) -> TensorId {
         let id = self.tensors.len();
-        self.shapes.insert(
-            id,
-            Shape {
-                is_batched: true,
-                shape: shape.to_vec(),
-            },
-        );
-        self.tensors.insert(id, Tensor::<f32>::zeros(&shape));
+        self.tensors.insert(id, t);
         id
     }
     pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
-        assert!(self
-            .shapes
-            .get(&tensor_id)
-            .unwrap()
-            .matches(&self.tensors[&tensor_id]));
+        if let Some(shape) = self.shapes.get(&tensor_id) {
+            assert!(shape.matches(&self.tensors[&tensor_id]));
+        }
         self.tensors.insert(tensor_id, tensor.view().into());
     }
     pub fn zero_grad(&mut self) {
@@ -165,7 +151,7 @@ impl Graph {
             .map(|id| self.tensors.get(id).expect("Tensor not found!"))
             .collect::<Vec<_>>();
         let out = f.run(&tensors);
-        let child = self.alloc_output(out.shape());
+        let child = self.alloc(out);
         self.computations.push(Computation {
             func: f,
             out: child,
