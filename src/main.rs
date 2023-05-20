@@ -277,22 +277,18 @@ fn xor() {
     }
 }
 use rand::Rng;
-
-fn text_dataset<R: Rng>(
+use std::collections::{HashMap, HashSet};
+fn sample_dataset<R: Rng>(
+    dataset: &[u32],
     batch_size: usize,
     context_size: usize,
     rng: &mut R,
 ) -> (Tensor<u32>, Tensor<u32>) {
-    let alpha = "abcdefghijklmnopqrstuvwxyz"
-        .chars()
-        .map(|c| (c as u32) - 97)
-        .collect::<Vec<_>>();
-
     let mut xs: Vec<u32> = Vec::new();
     let mut ys: Vec<u32> = Vec::new();
     for _i in 0..batch_size {
-        let start: usize = rng.gen_range(0..alpha.len());
-        let all = alpha
+        let start: usize = rng.gen_range(0..dataset.len());
+        let all = dataset
             .iter()
             .cycle()
             .skip(start)
@@ -326,13 +322,35 @@ fn gpt() {
     let mut rng = rand::thread_rng();
 
     let mut g = Graph::new();
+    let dataset_char =
+        fs::read_to_string("dataset.txt").expect("Should have been able to read the file");
+    let mut chars = dataset_char
+        .chars()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    chars.sort();
+    let int_to_ch = chars
+        .iter()
+        .enumerate()
+        .map(|(i, ch)| (i as u32, *ch))
+        .collect::<HashMap<u32, char>>();
+    let ch_to_int = chars
+        .iter()
+        .enumerate()
+        .map(|(i, ch)| (*ch, i as u32))
+        .collect::<HashMap<char, u32>>();
+    let dataset = dataset_char
+        .chars()
+        .map(|ch| ch_to_int.get(&ch).unwrap().clone())
+        .collect::<Vec<_>>();
 
     let batch_size = 3;
-    let num_tokens = 8;
-    let vocab_size = 26;
+    let num_tokens = 64;
+    let vocab_size = chars.len();
     let embedding_degree = 64;
 
-    let num_attentions = 2;
+    let num_attentions = 4;
     let num_heads = 4;
     let head_size = 16;
     let head_size_sqrt_inv = 0.25;
@@ -412,16 +430,39 @@ fn gpt() {
     let result = g.call(Add::new(), &[result_lin, to_vocab_bias]);
     params.extend(&[to_vocab, to_vocab_bias]);
 
-    let mut opt = NaiveOptimizer::new(0.001);
+    {
+        for p in params.iter() {
+            let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
+            let mut bytes = Vec::new();
+            tensor_file.read_to_end(&mut bytes).unwrap();
+            let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
+            g.load(*p, &t);
+        }
+        let mut embed_data = File::open("embedding.dat").unwrap();
+        let mut bytes = Vec::new();
+        embed_data.read_to_end(&mut bytes).unwrap();
+        embedding = bincode::deserialize(&bytes).unwrap();
+    }
+
+    let mut opt = NaiveOptimizer::new(0.0003);
     loop {
-        let (xs, ys) = text_dataset(batch_size, num_tokens, &mut rng);
+        let (xs, ys) = sample_dataset(&dataset, batch_size, num_tokens, &mut rng);
         g.load(inp, &embed(&xs, &embedding));
         g.forward();
         g.zero_grad();
-        println!("Inp: {:?}", xs);
-        println!("Pred: {:?}", g.get(result).argmax());
         let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
         println!("Loss: {}", err.mean());
+        if err.mean().is_nan() {
+            break;
+        }
+        {
+            for p in params.iter() {
+                let data = bincode::serialize(g.get(*p)).unwrap();
+                fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
+            }
+            let embed_data = bincode::serialize(&embedding).unwrap();
+            fs::write("embedding.dat", &embed_data).expect("Unable to write file");
+        }
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(inp), &mut embedding);
     }
