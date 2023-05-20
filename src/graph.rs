@@ -12,11 +12,11 @@ struct Shape {
 }
 
 impl Shape {
-    fn matches(&self, t: &Tensor<f32>) -> bool {
+    fn matches(&self, shape: &[usize]) -> bool {
         if self.is_batched {
-            t.shape().len() == self.shape.len() + 1 && t.shape()[1..] == self.shape
+            shape.len() == self.shape.len() + 1 && shape[1..] == self.shape
         } else {
-            t.shape() == self.shape
+            shape == self.shape
         }
     }
 }
@@ -74,7 +74,7 @@ impl Graph {
     }
     pub fn load<T: TensorOps<f32>>(&mut self, tensor_id: TensorId, tensor: &T) {
         if let Some(shape) = self.shapes.get(&tensor_id) {
-            assert!(shape.matches(&self.tensors[&tensor_id]));
+            assert!(shape.matches(tensor.shape()));
         }
         self.tensors.insert(tensor_id, tensor.view().into());
     }

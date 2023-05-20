@@ -357,7 +357,7 @@ fn gpt() {
 
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
 
-    let inp = g.alloc_param(&mut rng, &[batch_size, num_tokens, embedding_degree]);
+    let inp = g.alloc_input(&[num_tokens, embedding_degree]);
 
     let mut params: Vec<TensorId> = Vec::new();
 
@@ -465,6 +465,22 @@ fn gpt() {
         }
         g.optimize(&mut opt, &params.iter().cloned().collect());
         unembed(&xs, g.get(inp), &mut embedding);
+        /*{
+            let mut cnt = 1;
+            let mut context = vec![0; num_tokens];
+            for _ in 0..30 {
+                g.load(
+                    inp,
+                    &embed(&Tensor::raw(&[1, num_tokens], context.clone()), &embedding),
+                );
+                g.forward();
+                let next_ch = g.get(result).argmax().blob()[cnt];
+                println!("{}", int_to_ch.get(&next_ch).unwrap());
+                context[cnt] = next_ch;
+                cnt += 1;
+            }
+            println!();
+        }*/
     }
 }
 
