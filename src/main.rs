@@ -434,7 +434,7 @@ fn gpt() {
     params.extend(&[to_vocab, to_vocab_bias]);
 
     {
-        /*for p in params.iter() {
+        for p in params.iter() {
             let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
             let mut bytes = Vec::new();
             tensor_file.read_to_end(&mut bytes).unwrap();
@@ -449,10 +449,10 @@ fn gpt() {
         let mut pos_embed_data = File::open("pos_embedding.dat").unwrap();
         let mut bytes = Vec::new();
         pos_embed_data.read_to_end(&mut bytes).unwrap();
-        pos_embedding = bincode::deserialize(&bytes).unwrap();*/
+        pos_embedding = bincode::deserialize(&bytes).unwrap();
     }
 
-    let mut opt = NaiveOptimizer::new(0.0003);
+    let mut opt = NaiveOptimizer::new(0.0001);
     loop {
         let poses = Tensor::raw(
             &[batch_size, num_tokens],
