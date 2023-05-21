@@ -1,4 +1,5 @@
 use super::{Function, Tensor, TensorOps};
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct LayerNorm {
@@ -31,13 +32,33 @@ impl Function for LayerNorm {
         _out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
-        let vars = inps[0].map(self.dims, |l| {
+        let jacobian = inps[0].map(1, |l| {
+            let n = l.shape()[0];
             let avg = l.blob().iter().sum::<f32>() / l.size() as f32;
             let var = (l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() / l.size() as f32
                 + EPSILON)
                 .sqrt();
-            Tensor::constant(l.shape(), var)
+            Tensor::raw(
+                &[n, n],
+                (0..n * n)
+                    .into_par_iter()
+                    .map(|work| {
+                        let i = work / n;
+                        let j = work % n;
+                        if i == j {
+                            let a = l.get(i).scalar();
+                            ((1. - 1. / (n as f32)) * var - (a - avg).powi(2) / var) / var.powi(2)
+                        } else {
+                            let a = l.get(i).scalar();
+                            let b = l.get(j).scalar();
+                            (-1. / (n as f32) * var - (b - avg) * (a - avg) / var) / var.powi(2)
+                        }
+                    })
+                    .collect(),
+            )
         });
-        vec![out_grad * &vars]
+
+        let out = &out_grad.unsqueeze(-2) ^ &jacobian;
+        vec![out.squeeze(-2).into()]
     }
 }
