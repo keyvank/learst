@@ -356,8 +356,11 @@ fn gpt() {
     let head_size_sqrt_inv = 0.25;
 
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
+    let mut pos_embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
 
-    let inp = g.alloc_input(&[num_tokens, embedding_degree]);
+    let char_inp = g.alloc_input(&[num_tokens, embedding_degree]);
+    let pos_inp = g.alloc_input(&[num_tokens, embedding_degree]);
+    let inp = g.call(Add::new(), &[char_inp, pos_inp]);
 
     let mut params: Vec<TensorId> = Vec::new();
 
@@ -431,7 +434,7 @@ fn gpt() {
     params.extend(&[to_vocab, to_vocab_bias]);
 
     {
-        for p in params.iter() {
+        /*for p in params.iter() {
             let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
             let mut bytes = Vec::new();
             tensor_file.read_to_end(&mut bytes).unwrap();
@@ -442,12 +445,25 @@ fn gpt() {
         let mut bytes = Vec::new();
         embed_data.read_to_end(&mut bytes).unwrap();
         embedding = bincode::deserialize(&bytes).unwrap();
+
+        let mut pos_embed_data = File::open("pos_embedding.dat").unwrap();
+        let mut bytes = Vec::new();
+        pos_embed_data.read_to_end(&mut bytes).unwrap();
+        pos_embedding = bincode::deserialize(&bytes).unwrap();*/
     }
 
     let mut opt = NaiveOptimizer::new(0.0003);
     loop {
+        let poses = Tensor::raw(
+            &[batch_size, num_tokens],
+            (0..num_tokens as u32)
+                .cycle()
+                .take(num_tokens * batch_size)
+                .collect(),
+        );
         let (xs, ys) = sample_dataset(&dataset, batch_size, num_tokens, &mut rng);
-        g.load(inp, &embed(&xs, &embedding));
+        g.load(char_inp, &embed(&xs, &embedding));
+        g.load(pos_inp, &embed(&poses, &pos_embedding));
         g.forward();
         g.zero_grad();
         let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
@@ -462,9 +478,12 @@ fn gpt() {
             }
             let embed_data = bincode::serialize(&embedding).unwrap();
             fs::write("embedding.dat", &embed_data).expect("Unable to write file");
+            let pos_embed_data = bincode::serialize(&pos_embedding).unwrap();
+            fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
         }
         g.optimize(&mut opt, &params.iter().cloned().collect());
-        unembed(&xs, g.get(inp), &mut embedding);
+        unembed(&xs, g.get(char_inp), &mut embedding);
+        unembed(&poses, g.get(pos_inp), &mut pos_embedding);
         /*{
             let mut cnt = 1;
             let mut context = vec![0; num_tokens];
