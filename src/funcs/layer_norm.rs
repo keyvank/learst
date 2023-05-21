@@ -34,6 +34,7 @@ impl Function for LayerNorm {
     ) -> Vec<Tensor<f32>> {
         let jacobian = inps[0].map(1, |l| {
             let n = l.shape()[0];
+            let nf = n as f32;
             let avg = l.blob().iter().sum::<f32>() / l.size() as f32;
             let var = (l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() / l.size() as f32
                 + EPSILON)
@@ -47,11 +48,11 @@ impl Function for LayerNorm {
                         let j = work % n;
                         if i == j {
                             let a = l.get(i).scalar();
-                            ((1. - 1. / (n as f32)) * var - (a - avg).powi(2) / var) / var.powi(2)
+                            ((1. - 1. / nf) * var - (a - avg).powi(2) / var / nf) / var.powi(2)
                         } else {
                             let a = l.get(i).scalar();
                             let b = l.get(j).scalar();
-                            (-1. / (n as f32) * var - (b - avg) * (a - avg) / var) / var.powi(2)
+                            (-1. / nf * var - (b - avg) * (a - avg) / var / nf) / var.powi(2)
                         }
                     })
                     .collect(),
