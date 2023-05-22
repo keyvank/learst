@@ -36,9 +36,10 @@ impl Function for LayerNorm {
             let n = l.shape()[0];
             let nf = n as f32;
             let avg = l.blob().iter().sum::<f32>() / l.size() as f32;
-            let var = (l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() / l.size() as f32
-                + EPSILON)
-                .sqrt();
+            let sigma2 = l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>()
+                / l.size() as f32
+                + EPSILON;
+            let sigma = sigma2.sqrt();
             Tensor::raw(
                 &[n, n],
                 (0..n * n)
@@ -48,11 +49,11 @@ impl Function for LayerNorm {
                         let j = work % n;
                         if i == j {
                             let a = l.get(i).scalar();
-                            ((1. - 1. / nf) * var - (a - avg).powi(2) / var / nf) / var.powi(2)
+                            ((1. - 1. / nf) * sigma - (a - avg).powi(2) / sigma / nf) / sigma2
                         } else {
                             let a = l.get(i).scalar();
                             let b = l.get(j).scalar();
-                            (-1. / nf * var - (b - avg) * (a - avg) / var / nf) / var.powi(2)
+                            (-1. / nf * sigma - (b - avg) * (a - avg) / sigma / nf) / sigma2
                         }
                     })
                     .collect(),

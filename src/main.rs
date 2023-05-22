@@ -1,7 +1,7 @@
 use learst::funcs::*;
 use learst::graph::{Graph, TensorId};
 use learst::optimizer::NaiveOptimizer;
-use learst::tensor::{combine_map, shuffle_batch, Tensor, TensorElement, TensorMutOps, TensorOps};
+use learst::tensor::{shuffle_batch, Tensor, TensorElement, TensorMutOps, TensorOps};
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
@@ -255,24 +255,33 @@ fn xor() {
     let (xs, ys) = xor_dataset();
 
     let inp = g.alloc_input(&[4]);
-    let lin1 = g.alloc_param(&mut rng, &[4, 1]);
-    let lin1_bias = g.alloc_param(&mut rng, &[1]);
-    let lin2 = g.alloc_param(&mut rng, &[1, 4]);
+    let lin1 = g.alloc_param(&mut rng, &[4, 3]);
+    let lin1_bias = g.alloc_param(&mut rng, &[3]);
+    let lin2 = g.alloc_param(&mut rng, &[3, 4]);
     let lin2_bias = g.alloc_param(&mut rng, &[4]);
     let out1 = g.call(MatMul::new(), &[inp, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
-    let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
-    let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
+    //let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
+    let out1_bias_sigm_norm = g.call(LayerNorm::new(1), &[out1_bias]);
+    let out2 = g.call(MatMul::new(), &[out1_bias_sigm_norm, lin2]);
     let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
     let mut opt = NaiveOptimizer::new(0.1);
     let params = vec![lin1, lin2, lin1_bias, lin2_bias];
 
+    let mut under1 = false;
     loop {
         g.load(inp, &xs);
         g.forward();
         g.zero_grad();
         let err = g.backward_all(out2_bias, CrossEntropy::new(4, ys.clone()));
         println!("Loss: {}", err.mean());
+        if err.mean() > 1. && under1 {
+            println!("{:?}", g.get(out1_bias));
+            break;
+        } else if err.mean() < 1. {
+            under1 = true;
+        }
+
         g.optimize(&mut opt, &params.iter().cloned().collect());
     }
 }
@@ -310,7 +319,7 @@ fn embed(s: &Tensor<u32>, embedding: &Tensor<f32>) -> Tensor<f32> {
 }
 
 fn unembed(s: &Tensor<u32>, s_result: &Tensor<f32>, embedding: &mut Tensor<f32>) -> Tensor<f32> {
-    let degree = s_result.shape()[s_result.dim() - 1];
+    let _degree = s_result.shape()[s_result.dim() - 1];
     for (ch, embed) in s.blob().iter().zip(s_result.keep_right(1).inners().iter()) {
         let mut t = embedding.get_mut(*ch as usize);
         t.set(embed.clone());
@@ -330,7 +339,7 @@ fn gpt() {
         .into_iter()
         .collect::<Vec<_>>();
     chars.sort();
-    let int_to_ch = chars
+    let _int_to_ch = chars
         .iter()
         .enumerate()
         .map(|(i, ch)| (i as u32, *ch))
@@ -504,5 +513,5 @@ fn gpt() {
 }
 
 fn main() {
-    gpt();
+    xor();
 }
