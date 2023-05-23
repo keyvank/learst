@@ -162,18 +162,18 @@ fn convo() {
     let mut g = Graph::new();
 
     let (mut xs, mut ys) = mnist_images(
-        &"train-images.idx3-ubyte".into(),
-        &"train-labels.idx1-ubyte".into(),
+        &"train-images-idx3-ubyte".into(),
+        &"train-labels-idx1-ubyte".into(),
     )
     .unwrap();
     let (xs_test, ys_test) = mnist_images(
-        &"t10k-images.idx3-ubyte".into(),
-        &"t10k-labels.idx1-ubyte".into(),
+        &"t10k-images-idx3-ubyte".into(),
+        &"t10k-labels-idx1-ubyte".into(),
     )
     .unwrap();
     let xs_test: Tensor<f32> = xs_test.reshape(&[10000, 1, 28, 28]).into();
     let ys_test: Tensor<u32> = ys_test.reshape(&[10000]).into();
-    let batch_size = 1000;
+    let batch_size = 100;
 
     let inp = g.alloc_input(&[1, 28, 28]);
     let conv1 = g.alloc_param(&mut rng, &[5, 1, 3, 3]);
@@ -194,7 +194,7 @@ fn convo() {
     let out = g.call(MatMul::new(), &[flat, lin]);
     let out_bias = g.call(Add::new(), &[out, lin_bias]);
     let out_bias_relu = g.call(Relu::new(), &[out_bias]);
-    let out_bias_relu_norm = g.call(LayerNorm::new(2), &[out_bias_relu]);
+    let out_bias_relu_norm = g.call(LayerNorm::new(1), &[out_bias_relu]);
     let out2 = g.call(MatMul::new(), &[out_bias_relu_norm, lin2]);
     let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
     let params = vec![conv1, conv2, lin, lin_bias, lin2, lin2_bias];
@@ -210,7 +210,7 @@ fn convo() {
     loop {
         (xs, ys) = shuffle_batch(&mut rng, &xs, &ys);
         for epoch in 0..60 {
-            g.load(inp, &xs_test);
+            /*g.load(inp, &xs_test);
             g.forward();
             let predictions = g.get(out2_bias).argmax();
             println!(
@@ -222,7 +222,7 @@ fn convo() {
                     .map(|v| v.as_f32())
                     .sum::<f32>()
                     / predictions.size() as f32
-            );
+            );*/
 
             let xs: Tensor<f32> = xs
                 .get_slice(epoch * batch_size, batch_size)
@@ -235,6 +235,7 @@ fn convo() {
 
             g.load(inp, &xs);
             g.forward();
+            println!("DONE");
             g.zero_grad();
             let err = g.backward_all(out2_bias, CrossEntropy::new(10, ys.clone()));
             println!("Loss: {}", err.mean());
@@ -513,5 +514,5 @@ fn gpt() {
 }
 
 fn main() {
-    xor();
+    convo();
 }
