@@ -443,6 +443,12 @@ impl<V: TensorElement> Tensor<V> {
             shape: vec![],
         }
     }
+    pub fn vector(v: &[V]) -> Self {
+        Tensor {
+            blob: v.to_vec(),
+            shape: vec![v.len()],
+        }
+    }
     pub fn constant(shape: &[usize], value: V) -> Self {
         Tensor {
             blob: vec![value; shape.iter().fold(1, |curr, s| curr * s)],
@@ -462,6 +468,17 @@ impl<V: TensorElement> Tensor<V> {
                 .collect(),
             shape: shape.to_vec(),
         }
+    }
+    pub fn stack<T: TensorOps<V>>(inps: &[T]) -> Self {
+        let mut shape = inps
+            .get(0)
+            .expect("No tensors to be concatenated!")
+            .shape()
+            .to_vec();
+        inps.iter().all(|t| t.shape() == shape);
+        let blob = inps.iter().map(|t| t.blob().to_vec()).flatten().collect();
+        shape.insert(0, inps.len());
+        Tensor::raw(&shape, blob)
     }
     pub fn cat<T: TensorOps<V>>(inps: &[&T]) -> Self {
         let shape = inps
