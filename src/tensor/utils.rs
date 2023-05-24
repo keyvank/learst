@@ -33,7 +33,7 @@ fn combine_shapes(a: &[usize], b: &[usize]) -> Vec<usize> {
                 } else if b == 1 {
                     a
                 } else {
-                    panic!("Cannot be combined!")
+                    panic!("Cannot be combined! {:?} {:?}", a, b)
                 }
             },
         );
