@@ -340,7 +340,7 @@ fn gpt() {
         .into_iter()
         .collect::<Vec<_>>();
     chars.sort();
-    let _int_to_ch = chars
+    let int_to_ch = chars
         .iter()
         .enumerate()
         .map(|(i, ch)| (i as u32, *ch))
@@ -355,18 +355,18 @@ fn gpt() {
         .map(|ch| ch_to_int.get(&ch).unwrap().clone())
         .collect::<Vec<_>>();
 
-    let batch_size = 3;
-    let num_tokens = 64;
+    let batch_size = 1;
+    let num_tokens = 256;
     let vocab_size = chars.len();
     let embedding_degree = 64;
 
-    let num_attentions = 4;
-    let num_heads = 4;
-    let head_size = 16;
-    let head_size_sqrt_inv = 0.25;
+    let num_attentions = 6;
+    let num_heads = 8;
+    let head_size = 8;
+    let head_size_sqrt_inv = 0.125;
 
     let mut embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
-    let mut pos_embedding = Tensor::<f32>::rand(&mut rng, &[vocab_size, embedding_degree]);
+    let mut pos_embedding = Tensor::<f32>::rand(&mut rng, &[num_tokens, embedding_degree]);
 
     let char_inp = g.alloc_input(&[num_tokens, embedding_degree]);
     let pos_inp = g.alloc_input(&[num_tokens, embedding_degree]);
@@ -374,7 +374,7 @@ fn gpt() {
 
     let mut params: Vec<TensorId> = Vec::new();
 
-    params.extend(&[inp]);
+    params.extend(&[char_inp, pos_inp]);
 
     let mut curr_inp = inp;
     for _ in 0..num_attentions {
@@ -384,10 +384,17 @@ fn gpt() {
             let k_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
             let q_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
             let v_params = g.alloc_param(&mut rng, &[embedding_degree, head_size]);
+            let k_bias = g.alloc_param(&mut rng, &[head_size]);
+            let q_bias = g.alloc_param(&mut rng, &[head_size]);
+            let v_bias = g.alloc_param(&mut rng, &[head_size]);
             params.extend(&[k_params, q_params, v_params]);
-            let k = g.call(MatMul::new(), &[norm_inp, k_params]);
-            let q = g.call(MatMul::new(), &[norm_inp, q_params]);
-            let v = g.call(MatMul::new(), &[norm_inp, v_params]);
+            params.extend(&[k_bias, q_bias, v_bias]);
+            let k_lin = g.call(MatMul::new(), &[norm_inp, k_params]);
+            let q_lin = g.call(MatMul::new(), &[norm_inp, q_params]);
+            let v_lin = g.call(MatMul::new(), &[norm_inp, v_params]);
+            let k = g.call(Add::new(), &[k_lin, k_bias]);
+            let q = g.call(Add::new(), &[q_lin, q_bias]);
+            let v = g.call(Add::new(), &[v_lin, v_bias]);
             let q_t = g.call(Transpose::new(), &[q]);
             let kq = g.call(MatMul::new(), &[k, q_t]);
             let kq_coeff = g.call(Coeff::new(head_size_sqrt_inv), &[kq]);
@@ -445,11 +452,13 @@ fn gpt() {
 
     {
         for p in params.iter() {
-            let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
-            let mut bytes = Vec::new();
-            tensor_file.read_to_end(&mut bytes).unwrap();
-            let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
-            g.load(*p, &t);
+            if *p != char_inp || *p != pos_inp {
+                let mut tensor_file = File::open(format!("tensor_{}.dat", p)).unwrap();
+                let mut bytes = Vec::new();
+                tensor_file.read_to_end(&mut bytes).unwrap();
+                let t: Tensor<f32> = bincode::deserialize(&bytes).unwrap();
+                g.load(*p, &t);
+            }
         }
         let mut embed_data = File::open("embedding.dat").unwrap();
         let mut bytes = Vec::new();
@@ -478,22 +487,22 @@ fn gpt() {
         g.zero_grad();
         let err = g.backward_all(result, CrossEntropy::new(vocab_size as u32, ys.clone()));
         println!("Loss: {}", err.mean());
-        if err.mean().is_nan() {
-            break;
-        }
+        g.optimize(&mut opt, &params.iter().cloned().collect());
+        unembed(&xs, g.get(char_inp), &mut embedding);
+        unembed(&poses, g.get(pos_inp), &mut pos_embedding);
         {
             for p in params.iter() {
-                let data = bincode::serialize(g.get(*p)).unwrap();
-                fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
+                if *p != char_inp || *p != pos_inp {
+                    let data = bincode::serialize(g.get(*p)).unwrap();
+                    fs::write(format!("tensor_{}.dat", p), &data).expect("Unable to write file");
+                }
             }
             let embed_data = bincode::serialize(&embedding).unwrap();
             fs::write("embedding.dat", &embed_data).expect("Unable to write file");
             let pos_embed_data = bincode::serialize(&pos_embedding).unwrap();
             fs::write("pos_embedding.dat", &pos_embed_data).expect("Unable to write file");
         }
-        g.optimize(&mut opt, &params.iter().cloned().collect());
-        unembed(&xs, g.get(char_inp), &mut embedding);
-        unembed(&poses, g.get(pos_inp), &mut pos_embedding);
+
         /*{
             let mut cnt = 1;
             let mut context = vec![0; num_tokens];
@@ -514,5 +523,5 @@ fn gpt() {
 }
 
 fn main() {
-    convo();
+    gpt();
 }
