@@ -3,11 +3,15 @@ use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct LayerNorm {
+    norm: Tensor<f32>,
     dims: usize,
 }
 impl LayerNorm {
     pub fn new(dims: usize) -> Box<dyn Function> {
-        Box::new(Self { dims })
+        Box::new(Self {
+            dims,
+            norm: Tensor::scalar(0.),
+        })
     }
 }
 
@@ -15,7 +19,7 @@ const EPSILON: f32 = 1e-5;
 
 impl Function for LayerNorm {
     fn run(&mut self, inps: &[&Tensor<f32>]) -> Tensor<f32> {
-        inps[0].map(self.dims, |l| {
+        self.norm = inps[0].map(self.dims, |l| {
             let avg = l.blob().iter().sum::<f32>() / l.size() as f32;
             let var = (l.blob().iter().map(|f| (f - avg).powi(2)).sum::<f32>() / l.size() as f32
                 + EPSILON)
@@ -24,12 +28,13 @@ impl Function for LayerNorm {
                 l.shape(),
                 l.blob().iter().map(|v| (v - avg) / var).collect(),
             )
-        })
+        });
+        &(&self.norm * inps[1]) + inps[2]
     }
     fn grad(
         &self,
         inps: &[&Tensor<f32>],
-        _out: &Tensor<f32>,
+        out: &Tensor<f32>,
         out_grad: &Tensor<f32>,
     ) -> Vec<Tensor<f32>> {
         let jacobian = inps[0].map(self.dims, |l| {
@@ -63,8 +68,12 @@ impl Function for LayerNorm {
             *kept_right_shape.last_mut().unwrap() *= last;
         }
         let kept_right = out_grad.reshape(&kept_right_shape);
-        let out = &kept_right.unsqueeze(-2) ^ &jacobian;
-        let squeezed = out.squeeze(-2);
-        vec![squeezed.reshape(out_grad.shape()).into()]
+        let inp0_out = &kept_right.unsqueeze(-2) ^ &jacobian;
+        let squeezed = inp0_out.squeeze(-2);
+        vec![
+            &Into::<Tensor<f32>>::into(squeezed.reshape(out_grad.shape())) * inps[1],
+            out_grad * &self.norm,
+            out_grad.clone(),
+        ]
     }
 }
