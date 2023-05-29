@@ -262,9 +262,8 @@ fn xor() {
     let lin2_bias = g.alloc_param(&mut rng, &[4]);
     let out1 = g.call(MatMul::new(), &[inp, lin1]);
     let out1_bias = g.call(Add::new(), &[out1, lin1_bias]);
-    //let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
-    let out1_bias_sigm_norm = g.call(LayerNorm::new(1), &[out1_bias]);
-    let out2 = g.call(MatMul::new(), &[out1_bias_sigm_norm, lin2]);
+    let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
+    let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
     let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
     let mut opt = NaiveOptimizer::new(0.1);
     let params = vec![lin1, lin2, lin1_bias, lin2_bias];
@@ -523,5 +522,5 @@ fn gpt() {
 }
 
 fn main() {
-    gpt();
+    xor();
 }
