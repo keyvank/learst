@@ -1,6 +1,6 @@
 use learst::funcs::*;
 use learst::graph::{Graph, TensorId};
-use learst::optimizer::NaiveOptimizer;
+use learst::optimizer::{AdamW, NaiveOptimizer};
 use learst::tensor::{shuffle_batch, Tensor, TensorElement, TensorMutOps, TensorOps};
 use std::fs;
 use std::fs::File;
@@ -265,7 +265,7 @@ fn xor() {
     let out1_bias_sigm = g.call(Sigmoid::new(), &[out1_bias]);
     let out2 = g.call(MatMul::new(), &[out1_bias_sigm, lin2]);
     let out2_bias = g.call(Add::new(), &[out2, lin2_bias]);
-    let mut opt = NaiveOptimizer::new(0.1);
+    let mut opt = AdamW::new(0.1);
     let params = vec![lin1, lin2, lin1_bias, lin2_bias];
 
     let mut under1 = false;

@@ -30,6 +30,7 @@ pub struct AdamW {
     beta2: f32,
     weight_decay: f32,
     m_v: HashMap<usize, (Tensor<f32>, Tensor<f32>)>,
+    t: u32,
 }
 
 impl AdamW {
@@ -40,6 +41,7 @@ impl AdamW {
             beta2: 0.999,
             weight_decay: 0.01,
             m_v: HashMap::new(),
+            t: 1,
         })
     }
 }
@@ -59,12 +61,13 @@ impl Optimizer for AdamW {
                 &(&Tensor::scalar(self.beta1) * &mv.0) + &(&Tensor::scalar(1. - self.beta1) * grad);
             mv.1 = &(&Tensor::scalar(self.beta2) * &mv.1)
                 + &(&(&Tensor::scalar(1. - self.beta2) * grad) * grad);
-            let m_hat = &mv.0 * &Tensor::scalar(1. / (1. - self.beta1.powi(t as i32 + 1)));
-            let v_hat = &mv.1 * &Tensor::scalar(1. / (1. - self.beta2.powi(t as i32 + 1)));
+            let m_hat = &mv.0 * &Tensor::scalar(1. / (1. - self.beta1.powi(self.t as i32)));
+            let v_hat = &mv.1 * &Tensor::scalar(1. / (1. - self.beta2.powi(self.t as i32)));
 
             let v_hat_sqrt_inv = v_hat.map_values(|f| self.learning_rate / (f.sqrt() + EPSILON));
 
             *param = &*param - &(&m_hat * &v_hat_sqrt_inv);
+            self.t += 1;
         }
     }
 }
